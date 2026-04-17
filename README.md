@@ -49,3 +49,6 @@ src/
   services/      # Integração com API
   types/         # Tipagens TypeScript
   data/          # Dados mockados (fase inicial)
+
+
+# npx expo start --clear

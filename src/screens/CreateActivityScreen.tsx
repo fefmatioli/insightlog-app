@@ -6,26 +6,40 @@ import {
   Pressable,
   TextInput,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
+import { ActivityCategory } from '../data/mockActivities';
+import { useActivities } from '../context/ActivitiesContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateActivity'>;
-type Category = 'Estudo' | 'Saúde' | 'Social';
+type Category = ActivityCategory;
 
 export default function CreateActivityScreen({ navigation }: Props) {
+  const { addActivity } = useActivities();
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<Category>('Estudo');
 
   function handleSave() {
-    console.log({
+    if (!title.trim()) {
+      Alert.alert('Campo obrigatório', 'Preencha o título da atividade.');
+      return;
+    }
+
+    addActivity({
       title,
       description,
       category,
     });
+
+    setTitle('');
+    setDescription('');
+    setCategory('Estudo');
 
     navigation.goBack();
   }
@@ -36,7 +50,14 @@ export default function CreateActivityScreen({ navigation }: Props) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.pageTitle}>Nova Atividade</Text>
+
+      <View style={styles.header}>
+        <Text style={styles.pageTitle}>Nova Atividade</Text>
+        <Pressable onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>Voltar</Text>
+        </Pressable>
+      </View>
+
       <Text style={styles.pageSubtitle}>
         Registre uma nova atividade para acompanhar seus dados.
       </Text>
@@ -86,7 +107,7 @@ export default function CreateActivityScreen({ navigation }: Props) {
 
         <Text style={styles.label}>Data e Hora</Text>
         <View style={styles.dateBox}>
-          <Text style={styles.dateText}>1 abril 2026, 14:30</Text>
+          <Text style={styles.dateText}>Gerada automaticamente ao salvar</Text>
         </View>
 
         <Pressable style={styles.saveButton} onPress={handleSave}>
@@ -133,16 +154,29 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.xxl,
   },
+  header: {
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
   pageTitle: {
     fontSize: 28,
     fontWeight: '700',
     color: colors.text,
-    marginTop: spacing.md,
   },
+
+  backText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+
   pageSubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
     marginBottom: spacing.lg,
   },
   card: {

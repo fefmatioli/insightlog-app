@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ActivitiesScreen from '../screens/ActivitiesScreen';
 import CreateActivityScreen from '../screens/CreateActivityScreen';
 import DashboardScreen from '../screens/DashboardScreen';
+import { colors } from '../theme/colors';
 
 export type RootStackParamList = {
   Activities: undefined;
@@ -16,21 +17,37 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function AppNavigator() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Activities">
+      <Stack.Navigator
+        initialRouteName="Activities"
+        screenOptions={{
+          headerShadowVisible: false,
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
+          headerTintColor: colors.text,
+          headerTitle: '',
+        }}
+      >
         <Stack.Screen
           name="Activities"
           component={ActivitiesScreen}
-          options={{ title: 'Atividades' }}
+          options={{
+            headerShown: false,
+          }}
         />
         <Stack.Screen
           name="CreateActivity"
           component={CreateActivityScreen}
-          options={{ title: 'Nova Atividade' }}
+          options={{
+            headerShown: false,
+          }}
         />
         <Stack.Screen
           name="Dashboard"
           component={DashboardScreen}
-          options={{ title: 'Indicadores' }}
+          options={{
+            headerShown: false,
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -1,19 +1,21 @@
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { mockActivities } from '../data/mockActivities';
 import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
+import { useActivities } from '../context/ActivitiesContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 
 export default function DashboardScreen({ navigation }: Props) {
-  const totalActivities = mockActivities.length;
+  const { activities } = useActivities();
+
+  const totalActivities = activities.length;
 
   const categoryCounts = {
-    Estudo: mockActivities.filter((item) => item.category === 'Estudo').length,
-    Saúde: mockActivities.filter((item) => item.category === 'Saúde').length,
-    Social: mockActivities.filter((item) => item.category === 'Social').length,
+    Estudo: activities.filter((item) => item.category === 'Estudo').length,
+    Saúde: activities.filter((item) => item.category === 'Saúde').length,
+    Social: activities.filter((item) => item.category === 'Social').length,
   };
 
   const averagePerCategory = (
@@ -23,7 +25,8 @@ export default function DashboardScreen({ navigation }: Props) {
   const maxCategoryValue = Math.max(
     categoryCounts.Estudo,
     categoryCounts.Saúde,
-    categoryCounts.Social
+    categoryCounts.Social,
+    1
   );
 
   const temporalPoints = [40, 58, 45, 35, 52, 68, 56];

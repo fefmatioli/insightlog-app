@@ -1,9 +1,18 @@
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+} from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { mockActivities, Activity } from '../data/mockActivities';
+import { Activity } from '../data/mockActivities';
 import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
+import { useActivities } from '../context/ActivitiesContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Activities'>;
 
@@ -13,9 +22,58 @@ const categoryColors = {
   Social: colors.rose,
 };
 
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+
+  return (
+    date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+    }) +
+    ' • ' +
+    date.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  );
+}
+
+function isToday(dateString: string) {
+  const date = new Date(dateString);
+  const today = new Date();
+
+  return (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  );
+}
+
 export default function ActivitiesScreen({ navigation }: Props) {
-  const totalActivities = mockActivities.length;
-  const todayActivities = 2;
+  const { activities, removeActivity } = useActivities();
+  const [search, setSearch] = useState('');
+
+  const filteredActivities = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    const sortedActivities = [...activities].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    if (!term) return sortedActivities;
+
+    return sortedActivities.filter((item) => {
+      const titleMatch = item.title.toLowerCase().includes(term);
+      const categoryMatch = item.category.toLowerCase().includes(term);
+      const descriptionMatch = item.description?.toLowerCase().includes(term);
+
+      return titleMatch || categoryMatch || descriptionMatch;
+    });
+  }, [activities, search]);
+
+  const totalActivities = activities.length;
+  const todayActivities = activities.filter((item) => isToday(item.createdAt)).length;
 
   function renderItem({ item }: { item: Activity }) {
     return (
@@ -26,23 +84,49 @@ export default function ActivitiesScreen({ navigation }: Props) {
             { backgroundColor: categoryColors[item.category] },
           ]}
         />
+
         <View style={styles.activityContent}>
           <Text style={styles.activityTitle}>{item.title}</Text>
           <Text style={styles.activityCategory}>{item.category}</Text>
+
+          {!!item.description && (
+            <Text style={styles.activityDescription} numberOfLines={1}>
+              {item.description}
+            </Text>
+          )}
+
+          <View style={styles.activityFooter}>
+            <Text style={styles.activityDate}>{formatDate(item.createdAt)}</Text>
+
+            <Pressable onPress={() => removeActivity(item.id)}>
+              <Text style={styles.deleteText}>Excluir</Text>
+            </Pressable>
+          </View>
         </View>
-        <Text style={styles.activityDate}>{item.dateLabel}</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.appTitle}>InsightLog</Text>
-      <Text style={styles.subtitle}>Monitore suas atividades com leveza</Text>
+      <View style={styles.brandRow}>
+        <View>
+          <Text style={styles.appTitle}>InsightLog</Text>
+          <Text style={styles.subtitle}>Monitore suas atividades com leveza</Text>
+        </View>
 
-      <View style={styles.searchBox}>
-        <Text style={styles.searchText}>Pesquisar atividades...</Text>
+        <View style={styles.logoBadge}>
+          <Text style={styles.logoText}>IL</Text>
+        </View>
       </View>
+
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Pesquisar atividades..."
+        placeholderTextColor={colors.textSecondary}
+        value={search}
+        onChangeText={setSearch}
+      />
 
       <View style={styles.metricsRow}>
         <View style={[styles.metricCard, { backgroundColor: colors.primarySoft }]}>
@@ -66,11 +150,19 @@ export default function ActivitiesScreen({ navigation }: Props) {
       </View>
 
       <FlatList
-        data={mockActivities}
+        data={filteredActivities}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Nada encontrado</Text>
+            <Text style={styles.emptySubtitle}>
+              Tente buscar por outro termo.
+            </Text>
+          </View>
+        }
       />
 
       <Pressable
@@ -90,6 +182,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xxl,
   },
+  brandRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
   appTitle: {
     fontSize: 28,
     fontWeight: '700',
@@ -99,18 +197,30 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     fontSize: 14,
     color: colors.textSecondary,
-    marginBottom: spacing.lg,
   },
-  searchBox: {
+  logoBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    color: colors.primaryDark,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  searchInput: {
     backgroundColor: colors.surfaceSoft,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
-  },
-  searchText: {
-    color: colors.textSecondary,
     fontSize: 14,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   metricsRow: {
     flexDirection: 'row',
@@ -161,7 +271,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -173,6 +283,7 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 14,
     marginRight: spacing.md,
+    marginTop: 2,
   },
   activityContent: {
     flex: 1,
@@ -186,10 +297,43 @@ const styles = StyleSheet.create({
   activityCategory: {
     fontSize: 13,
     color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  activityDescription: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  activityFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   activityDate: {
     fontSize: 12,
     color: colors.textSecondary,
+  },
+  deleteText: {
+    color: '#D9534F',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyState: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   fab: {
     position: 'absolute',

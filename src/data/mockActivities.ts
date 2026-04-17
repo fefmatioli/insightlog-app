@@ -5,7 +5,7 @@ export type Activity = {
   title: string;
   category: ActivityCategory;
   description?: string;
-  dateLabel: string;
+  createdAt: string;
 };
 
 export const mockActivities: Activity[] = [
@@ -13,30 +13,35 @@ export const mockActivities: Activity[] = [
     id: '1',
     title: 'Leitura de React Native',
     category: 'Estudo',
-    dateLabel: 'Hoje, 10:30',
+    description: 'Revisão dos conceitos iniciais.',
+    createdAt: new Date().toISOString(),
   },
   {
     id: '2',
     title: 'Corrida matinal',
     category: 'Saúde',
-    dateLabel: 'Ontem, 18:00',
+    description: '30 minutos de atividade física.',
+    createdAt: new Date().toISOString(),
   },
   {
     id: '3',
     title: 'Almoço com amigos',
     category: 'Social',
-    dateLabel: 'Ontem, 12:30',
+    description: 'Encontro no centro.',
+    createdAt: new Date().toISOString(),
   },
   {
     id: '4',
     title: 'Revisão da aula',
     category: 'Estudo',
-    dateLabel: 'Seg, 19:20',
+    description: 'Resumo do conteúdo do dia.',
+    createdAt: new Date().toISOString() ,
   },
   {
     id: '5',
     title: 'Caminhada leve',
     category: 'Saúde',
-    dateLabel: 'Dom, 08:10',
+    description: 'Atividade ao ar livre.',
+    createdAt: new Date().toISOString(),
   },
 ];
