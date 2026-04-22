@@ -86,20 +86,36 @@ export default function ActivitiesScreen({ navigation }: Props) {
         />
 
         <View style={styles.activityContent}>
-          <Text style={styles.activityTitle}>{item.title}</Text>
-          <Text style={styles.activityCategory}>{item.category}</Text>
+          <View style={styles.topRow}>
+            <View style={styles.textBlock}>
+              <Text style={styles.activityTitle}>{item.title}</Text>
+              <Text style={styles.activityCategory}>{item.category}</Text>
+            </View>
+
+            <Text style={styles.activityDate}>{formatDate(item.createdAt)}</Text>
+          </View>
 
           {!!item.description && (
-            <Text style={styles.activityDescription} numberOfLines={1}>
-              {item.description}
-            </Text>
+            <Text style={styles.activityDescription}>{item.description}</Text>
           )}
 
-          <View style={styles.activityFooter}>
-            <Text style={styles.activityDate}>{formatDate(item.createdAt)}</Text>
+          <View style={styles.actionsRow}>
+            <Pressable
+              style={[styles.actionButton, styles.editButton]}
+              onPress={() =>
+                navigation.navigate('CreateActivity', {
+                  activityId: item.id,
+                } as never)
+              }
+            >
+              <Text style={styles.editButtonText}>Editar</Text>
+            </Pressable>
 
-            <Pressable onPress={() => removeActivity(item.id)}>
-              <Text style={styles.deleteText}>Excluir</Text>
+            <Pressable
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => removeActivity(item.id)}
+            >
+              <Text style={styles.deleteButtonText}>Excluir</Text>
             </Pressable>
           </View>
         </View>
@@ -288,6 +304,14 @@ const styles = StyleSheet.create({
   activityContent: {
     flex: 1,
   },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  textBlock: {
+    flex: 1,
+  },
   activityTitle: {
     fontSize: 16,
     fontWeight: '600',
@@ -297,24 +321,41 @@ const styles = StyleSheet.create({
   activityCategory: {
     fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   activityDescription: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  activityFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    marginBottom: spacing.md,
   },
   activityDate: {
     fontSize: 12,
     color: colors.textSecondary,
+    maxWidth: 86,
+    textAlign: 'right',
   },
-  deleteText: {
-    color: '#D9534F',
+  actionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+  },
+  editButton: {
+    backgroundColor: colors.primarySoft,
+  },
+  deleteButton: {
+    backgroundColor: '#FBE4E3',
+  },
+  editButtonText: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deleteButtonText: {
+    color: '#C94B46',
     fontSize: 12,
     fontWeight: '600',
   },

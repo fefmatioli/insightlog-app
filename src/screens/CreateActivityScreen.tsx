@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,12 +18,71 @@ import { useActivities } from '../context/ActivitiesContext';
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateActivity'>;
 type Category = ActivityCategory;
 
-export default function CreateActivityScreen({ navigation }: Props) {
-  const { addActivity } = useActivities();
+function formatDateTimeLocal(dateString: string) {
+  const date = new Date(dateString);
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
+function parseDateTimeBR(value: string) {
+  const match = value.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/
+  );
+
+  if (!match) return null;
+
+  const [, day, month, year, hour, minute] = match;
+
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute)
+  );
+
+  if (isNaN(date.getTime())) return null;
+
+  return date.toISOString();
+}
+
+export default function CreateActivityScreen({ navigation, route }: Props) {
+  const { activities, addActivity, updateActivity } = useActivities();
+
+  const activityId = route.params?.activityId;
+
+  const activityToEdit = useMemo(
+    () => activities.find((item) => item.id === activityId),
+    [activities, activityId]
+  );
+
+  const isEditing = !!activityToEdit;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<Category>('Estudo');
+  const [dateTime, setDateTime] = useState('');
+
+  useEffect(() => {
+    if (activityToEdit) {
+      setTitle(activityToEdit.title);
+      setDescription(activityToEdit.description || '');
+      setCategory(activityToEdit.category);
+      setDateTime(formatDateTimeLocal(activityToEdit.createdAt));
+    } else {
+      setTitle('');
+      setDescription('');
+      setCategory('Estudo');
+      setDateTime(formatDateTimeLocal(new Date().toISOString()));
+    }
+  }, [activityToEdit]);
 
   function handleSave() {
     if (!title.trim()) {
@@ -31,15 +90,28 @@ export default function CreateActivityScreen({ navigation }: Props) {
       return;
     }
 
-    addActivity({
+    const parsedDate = parseDateTimeBR(dateTime);
+
+    if (!parsedDate) {
+      Alert.alert(
+        'Data inválida',
+        'Informe a data no formato dd/mm/aaaa hh:mm'
+      );
+      return;
+    }
+
+    const payload = {
       title,
       description,
       category,
-    });
+      createdAt: parsedDate,
+    };
 
-    setTitle('');
-    setDescription('');
-    setCategory('Estudo');
+    if (isEditing && activityToEdit) {
+      updateActivity(activityToEdit.id, payload);
+    } else {
+      addActivity(payload);
+    }
 
     navigation.goBack();
   }
@@ -50,16 +122,19 @@ export default function CreateActivityScreen({ navigation }: Props) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-
       <View style={styles.header}>
-        <Text style={styles.pageTitle}>Nova Atividade</Text>
+        <Text style={styles.pageTitle}>
+          {isEditing ? 'Editar Atividade' : 'Nova Atividade'}
+        </Text>
         <Pressable onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>Voltar</Text>
         </Pressable>
       </View>
 
       <Text style={styles.pageSubtitle}>
-        Registre uma nova atividade para acompanhar seus dados.
+        {isEditing
+          ? 'Atualize os dados da atividade selecionada.'
+          : 'Registre uma nova atividade para acompanhar seus dados.'}
       </Text>
 
       <View style={styles.card}>
@@ -106,12 +181,18 @@ export default function CreateActivityScreen({ navigation }: Props) {
         />
 
         <Text style={styles.label}>Data e Hora</Text>
-        <View style={styles.dateBox}>
-          <Text style={styles.dateText}>Gerada automaticamente ao salvar</Text>
-        </View>
+        <TextInput
+          style={styles.input}
+          value={dateTime}
+          onChangeText={setDateTime}
+          placeholder="dd/mm/aaaa hh:mm"
+          placeholderTextColor={colors.textSecondary}
+        />
 
         <Pressable style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Salvar Atividade</Text>
+          <Text style={styles.saveButtonText}>
+            {isEditing ? 'Salvar Alterações' : 'Salvar Atividade'}
+          </Text>
         </Pressable>
       </View>
     </ScrollView>
@@ -161,19 +242,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-
   pageTitle: {
     fontSize: 28,
     fontWeight: '700',
     color: colors.text,
   },
-
   backText: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.primaryDark,
   },
-
   pageSubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
@@ -227,24 +305,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '600',
   },
-  dateBox: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  dateText: {
-    color: colors.text,
-    fontSize: 15,
-  },
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingVertical: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: spacing.xl,
   },
   saveButtonText: {
     color: colors.surface,

@@ -8,7 +8,7 @@ import { colors } from '../theme/colors';
 
 export type RootStackParamList = {
   Activities: undefined;
-  CreateActivity: undefined;
+  CreateActivity: { activityId?: string } | undefined;
   Dashboard: undefined;
 };
 
