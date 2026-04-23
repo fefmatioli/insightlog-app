@@ -13,6 +13,12 @@ import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
 import { useActivities } from '../context/ActivitiesContext';
 import { ActivityCategory, ActivityStatus } from '../data/mockActivities';
+import {
+  normalizeDateInput,
+  toISODate,
+  toShortDisplayDate,
+} from '../utils/date';
+import ScreenHeader from '@/components/ScreenHeader';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 type PeriodFilter = 'Dia' | 'Semana' | 'Mês' | 'Personalizado';
@@ -30,40 +36,18 @@ const categoryColors: Record<ActivityCategory, string> = {
   Social: colors.rose,
 };
 
-function formatDateInput(value: string) {
-  const digitsOnly = value.replace(/\D/g, '').slice(0, 8);
+const statuses: ActivityStatus[] = [
+  'Pendente',
+  'Em andamento',
+  'Concluída',
+  'Adiada',
+];
 
-  if (digitsOnly.length <= 2) return digitsOnly;
-  if (digitsOnly.length <= 4) {
-    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
-  }
-
-  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)}`;
-}
-
-function parseDateBR(value: string) {
-  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-
-  if (!match) return null;
-
-  const [, day, month, year] = match;
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
-
-  if (isNaN(date.getTime())) return null;
-
-  return date;
-}
+const completedStatus: ActivityStatus = 'Concluída';
 
 function isSameDay(date: Date, reference: Date) {
   return (
     date.getDate() === reference.getDate() &&
-    date.getMonth() === reference.getMonth() &&
-    date.getFullYear() === reference.getFullYear()
-  );
-}
-
-function isSameMonth(date: Date, reference: Date) {
-  return (
     date.getMonth() === reference.getMonth() &&
     date.getFullYear() === reference.getFullYear()
   );
@@ -75,39 +59,67 @@ function isWithinLast7Days(date: Date, reference: Date) {
   return diff >= 0 && diff <= sevenDaysInMs;
 }
 
-function formatShortDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-  });
+function isSameMonth(date: Date, reference: Date) {
+  return (
+    date.getMonth() === reference.getMonth() &&
+    date.getFullYear() === reference.getFullYear()
+  );
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function countCompletionStreak(dates: string[], reference: Date) {
+  const completedDays = new Set(
+    dates.map((date) => startOfDay(new Date(date)).toDateString())
+  );
+
+  let streak = 0;
+  let cursor = startOfDay(reference);
+
+  while (completedDays.has(cursor.toDateString())) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+
+  return streak;
 }
 
 export default function DashboardScreen({ navigation }: Props) {
   const { activities } = useActivities();
+  const now = new Date();
 
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('Mês');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
   const filteredActivities = useMemo(() => {
-    const now = new Date();
-
     if (periodFilter === 'Personalizado') {
-      const start = parseDateBR(customStartDate);
-      const end = parseDateBR(customEndDate);
+      const startISO = toISODate(customStartDate);
+      const endISO = toISODate(customEndDate);
+
+      const start = startISO ? new Date(startISO) : null;
+      const end = endISO ? new Date(endISO) : null;
 
       if (!start || !end) return activities;
 
       return activities.filter((item) => {
         const date = new Date(item.createdAt);
 
-        const startOfDay = new Date(start);
-        startOfDay.setHours(0, 0, 0, 0);
+        const startDate = startOfDay(start);
+        const endDate = new Date(end);
+        endDate.setHours(23, 59, 59, 999);
 
-        const endOfDay = new Date(end);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        return date >= startOfDay && date <= endOfDay;
+        return date >= startDate && date <= endDate;
       });
     }
 
@@ -120,16 +132,25 @@ export default function DashboardScreen({ navigation }: Props) {
 
       return true;
     });
-  }, [activities, periodFilter, customStartDate, customEndDate]);
+  }, [activities, periodFilter, customStartDate, customEndDate, now]);
 
   const total = filteredActivities.length;
-  const completed = filteredActivities.filter((item) => item.status === 'Concluída').length;
-  const inProgress = filteredActivities.filter((item) => item.status === 'Em andamento').length;
-  const postponed = filteredActivities.filter((item) => item.status === 'Adiada').length;
-  const pending = filteredActivities.filter((item) => item.status === 'Pendente').length;
+  const completed = filteredActivities.filter(
+    (item) => item.status === completedStatus
+  ).length;
+  const inProgress = filteredActivities.filter(
+    (item) => item.status === 'Em andamento'
+  ).length;
+  const postponed = filteredActivities.filter(
+    (item) => item.status === 'Adiada'
+  ).length;
+  const pending = filteredActivities.filter(
+    (item) => item.status === 'Pendente'
+  ).length;
 
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const postponementRate = total > 0 ? Math.round((postponed / total) * 100) : 0;
+  const postponementRate =
+    total > 0 ? Math.round((postponed / total) * 100) : 0;
 
   const activeDays = new Set(
     filteredActivities.map((item) => new Date(item.createdAt).toDateString())
@@ -142,7 +163,7 @@ export default function DashboardScreen({ navigation }: Props) {
       (item) => item.category === category
     );
     const categoryCompleted = categoryActivities.filter(
-      (item) => item.status === 'Concluída'
+      (item) => item.status === completedStatus
     ).length;
 
     const progress =
@@ -160,13 +181,6 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const topCategory = [...categoryProgress].sort((a, b) => b.total - a.total)[0];
 
-  const statuses: ActivityStatus[] = [
-    'Pendente',
-    'Em andamento',
-    'Concluída',
-    'Adiada',
-  ];
-
   const statusCounts = statuses.map((status) => ({
     status,
     count: filteredActivities.filter((item) => item.status === status).length,
@@ -174,12 +188,75 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const maxStatusCount = Math.max(...statusCounts.map((item) => item.count), 1);
 
+  const completedDates = activities
+    .filter((item) => item.status === completedStatus)
+    .map((item) => {
+      const completedEntry =
+        [...item.history]
+          .reverse()
+          .find((entry) => entry.status === completedStatus) ?? null;
+
+      return completedEntry?.changedAt ?? item.createdAt;
+    });
+
+  const completionStreak = countCompletionStreak(completedDates, now);
+
+  const currentWeekStart = startOfDay(addDays(now, -6));
+  const previousWeekStart = startOfDay(addDays(now, -13));
+  const previousWeekEnd = currentWeekStart;
+
+  const completedThisWeek = activities.filter((item) => {
+    if (item.status !== completedStatus) return false;
+
+    const completedEntry =
+      [...item.history]
+        .reverse()
+        .find((entry) => entry.status === completedStatus) ?? null;
+
+    const completedAt = new Date(completedEntry?.changedAt ?? item.createdAt);
+    return completedAt >= currentWeekStart && completedAt <= now;
+  }).length;
+
+  const completedLastWeek = activities.filter((item) => {
+    if (item.status !== completedStatus) return false;
+
+    const completedEntry =
+      [...item.history]
+        .reverse()
+        .find((entry) => entry.status === completedStatus) ?? null;
+
+    const completedAt = new Date(completedEntry?.changedAt ?? item.createdAt);
+    return completedAt >= previousWeekStart && completedAt < previousWeekEnd;
+  }).length;
+
+  const weeklyDelta = completedThisWeek - completedLastWeek;
+  const weeklyDeltaLabel =
+    weeklyDelta > 0
+      ? `+${weeklyDelta} vs semana anterior`
+      : weeklyDelta < 0
+        ? `${weeklyDelta} vs semana anterior`
+        : 'mesmo ritmo da semana anterior';
+
+  const oldPending = activities.filter((item) => {
+    if (item.status !== 'Pendente') return false;
+
+    const createdAt = startOfDay(new Date(item.createdAt));
+    const ageInDays =
+      (startOfDay(now).getTime() - createdAt.getTime()) /
+      (1000 * 60 * 60 * 24);
+
+    return ageInDays >= 7;
+  }).length;
+
   const activitiesByDay = useMemo(() => {
-    const grouped = filteredActivities.reduce<Record<string, number>>((acc, item) => {
-      const key = new Date(item.createdAt).toLocaleDateString('pt-BR');
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
+    const grouped = filteredActivities.reduce<Record<string, number>>(
+      (acc, item) => {
+        const key = new Date(item.createdAt).toLocaleDateString('pt-BR');
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      },
+      {}
+    );
 
     return Object.entries(grouped)
       .map(([date, count]) => ({ date, count }))
@@ -203,10 +280,7 @@ export default function DashboardScreen({ navigation }: Props) {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
-        <Text style={styles.pageTitle}>Métricas</Text>
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>Voltar</Text>
-        </Pressable>
+        <ScreenHeader title="Métricas" onBack={() => navigation.goBack()} />
       </View>
 
       <Text style={styles.pageSubtitle}>
@@ -214,29 +288,31 @@ export default function DashboardScreen({ navigation }: Props) {
       </Text>
 
       <View style={styles.filterRow}>
-        {(['Dia', 'Semana', 'Mês', 'Personalizado'] as PeriodFilter[]).map((filter) => {
-          const selected = periodFilter === filter;
+        {(['Dia', 'Semana', 'Mês', 'Personalizado'] as PeriodFilter[]).map(
+          (filter) => {
+            const selected = periodFilter === filter;
 
-          return (
-            <Pressable
-              key={filter}
-              onPress={() => setPeriodFilter(filter)}
-              style={[
-                styles.filterChip,
-                selected && styles.filterChipSelected,
-              ]}
-            >
-              <Text
+            return (
+              <Pressable
+                key={filter}
+                onPress={() => setPeriodFilter(filter)}
                 style={[
-                  styles.filterChipText,
-                  selected && styles.filterChipTextSelected,
+                  styles.filterChip,
+                  selected && styles.filterChipSelected,
                 ]}
               >
-                {filter}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selected && styles.filterChipTextSelected,
+                  ]}
+                >
+                  {filter}
+                </Text>
+              </Pressable>
+            );
+          }
+        )}
       </View>
 
       {periodFilter === 'Personalizado' && (
@@ -248,7 +324,7 @@ export default function DashboardScreen({ navigation }: Props) {
             placeholder="Data inicial: dd/mm/aaaa"
             placeholderTextColor={colors.textSecondary}
             value={customStartDate}
-            onChangeText={(value) => setCustomStartDate(formatDateInput(value))}
+            onChangeText={(value) => setCustomStartDate(normalizeDateInput(value))}
             keyboardType="numeric"
           />
 
@@ -257,7 +333,7 @@ export default function DashboardScreen({ navigation }: Props) {
             placeholder="Data final: dd/mm/aaaa"
             placeholderTextColor={colors.textSecondary}
             value={customEndDate}
-            onChangeText={(value) => setCustomEndDate(formatDateInput(value))}
+            onChangeText={(value) => setCustomEndDate(normalizeDateInput(value))}
             keyboardType="numeric"
           />
         </View>
@@ -305,6 +381,33 @@ export default function DashboardScreen({ navigation }: Props) {
         />
       </View>
 
+      <View style={styles.topCardsGrid}>
+        <MetricCard
+          title="Sequência"
+          value={String(completionStreak)}
+          subtitle={
+            completionStreak === 1 ? 'dia concluindo' : 'dias concluindo'
+          }
+          backgroundColor="#FFF1CC"
+        />
+        <MetricCard
+          title="Ritmo semanal"
+          value={String(completedThisWeek)}
+          subtitle={weeklyDeltaLabel}
+          backgroundColor="#EAF4FF"
+        />
+      </View>
+
+      <View style={styles.topCardsGrid}>
+        <MetricCard
+          title="Pendentes antigos"
+          value={String(oldPending)}
+          subtitle="há 7 dias ou mais"
+          backgroundColor="#FCE8E6"
+          fullWidth
+        />
+      </View>
+
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Progresso Geral</Text>
 
@@ -316,12 +419,7 @@ export default function DashboardScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${completionRate}%` },
-            ]}
-          />
+          <View style={[styles.progressFill, { width: `${completionRate}%` }]} />
         </View>
       </View>
 
@@ -338,16 +436,13 @@ export default function DashboardScreen({ navigation }: Props) {
               return (
                 <View key={item.date} style={styles.dayBarGroup}>
                   <View style={styles.dayBarArea}>
-                    <View
-                      style={[
-                        styles.dayBar,
-                        { height },
-                      ]}
-                    />
+                    <View style={[styles.dayBar, { height }]} />
                   </View>
                   <Text style={styles.dayBarValue}>{item.count}</Text>
                   <Text style={styles.dayBarLabel}>
-                    {item.date.slice(0, 5)}
+                    {toShortDisplayDate(
+                      new Date(item.date.split('/').reverse().join('-')).toISOString()
+                    )}
                   </Text>
                 </View>
               );
@@ -436,6 +531,7 @@ type MetricCardProps = {
   value: string;
   subtitle: string;
   backgroundColor: string;
+  fullWidth?: boolean;
 };
 
 function MetricCard({
@@ -443,9 +539,16 @@ function MetricCard({
   value,
   subtitle,
   backgroundColor,
+  fullWidth = false,
 }: MetricCardProps) {
   return (
-    <View style={[styles.metricCard, { backgroundColor }]}>
+    <View
+      style={[
+        styles.metricCard,
+        fullWidth && styles.metricCardFull,
+        { backgroundColor },
+      ]}
+    >
       <Text style={styles.metricTitle}>{title}</Text>
       <Text style={styles.metricValue}>{value}</Text>
       <Text style={styles.metricSubtitle}>{subtitle}</Text>
@@ -468,16 +571,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  backText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primaryDark,
   },
   pageSubtitle: {
     fontSize: 14,
@@ -549,6 +642,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     minHeight: 120,
     justifyContent: 'space-between',
+  },
+  metricCardFull: {
+    width: '100%',
   },
   metricTitle: {
     fontSize: 14,

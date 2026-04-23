@@ -17,52 +17,12 @@ import {
   ActivityStatus,
 } from '../data/mockActivities';
 import { useActivities } from '../context/ActivitiesContext';
+import { normalizeDateInput, toDisplayDate, toISODate } from '../utils/date';
+import ScreenHeader from '@/components/ScreenHeader';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateActivity'>;
 type Category = ActivityCategory;
 type Status = ActivityStatus;
-
-function formatDateInput(value: string) {
-  const digitsOnly = value.replace(/\D/g, '').slice(0, 8);
-
-  if (digitsOnly.length <= 2) return digitsOnly;
-  if (digitsOnly.length <= 4) {
-    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
-  }
-
-  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)}`;
-}
-
-function parseDateBR(value: string) {
-  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-
-  if (!match) return null;
-
-  const [, day, month, year] = match;
-
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
-
-  if (isNaN(date.getTime())) return null;
-
-  return date.toISOString();
-}
-
-function formatDateTimeInput(value: string) {
-  const digitsOnly = value.replace(/\D/g, '').slice(0, 12);
-
-  if (digitsOnly.length <= 2) return digitsOnly;
-  if (digitsOnly.length <= 4) {
-    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
-  }
-  if (digitsOnly.length <= 8) {
-    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4)}`;
-  }
-  if (digitsOnly.length <= 10) {
-    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)} ${digitsOnly.slice(8)}`;
-  }
-
-  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)} ${digitsOnly.slice(8, 10)}:${digitsOnly.slice(10, 12)}`;
-}
 
 export default function CreateActivityScreen({
   navigation,
@@ -91,13 +51,13 @@ export default function CreateActivityScreen({
       setDescription(activityToEdit.description || '');
       setCategory(activityToEdit.category);
       setStatus(activityToEdit.status);
-      setDateTime(formatDateInput(activityToEdit.createdAt));
+      setDateTime(toDisplayDate(activityToEdit.createdAt));
     } else {
       setTitle('');
       setDescription('');
       setCategory('Estudo');
       setStatus('Pendente');
-      setDateTime(formatDateInput(new Date().toISOString()));
+      setDateTime(toDisplayDate(new Date().toISOString()));
     }
   }, [activityToEdit]);
 
@@ -107,13 +67,10 @@ export default function CreateActivityScreen({
       return;
     }
 
-    const parsedDate = parseDateBR(dateTime);
+    const parsedDate = toISODate(dateTime);
 
     if (!parsedDate) {
-      Alert.alert(
-        'Data inválida',
-        'Informe a data no formato dd/mm/aaaa hh:mm'
-      );
+      Alert.alert('Data inválida', 'Informe a data no formato dd/mm/aaaa');
       return;
     }
 
@@ -141,12 +98,10 @@ export default function CreateActivityScreen({
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.header}>
-        <Text style={styles.pageTitle}>
-          {isEditing ? 'Editar Atividade' : 'Nova Atividade'}
-        </Text>
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>Voltar</Text>
-        </Pressable>
+        <ScreenHeader
+          title="Nova Atividade"
+          onBack={() => navigation.goBack()}
+        />
       </View>
 
       <Text style={styles.pageSubtitle}>
@@ -226,11 +181,11 @@ export default function CreateActivityScreen({
           textAlignVertical="top"
         />
 
-        <Text style={styles.label}>Data e Hora</Text>
+        <Text style={styles.label}>Data</Text>
         <TextInput
           style={styles.input}
           value={dateTime}
-          onChangeText={(value) => setDateTime(formatDateTimeInput(value))}
+          onChangeText={(value) => setDateTime(normalizeDateInput(value))}
           placeholder="dd/mm/aaaa"
           placeholderTextColor={colors.textSecondary}
           keyboardType="numeric"
@@ -250,7 +205,7 @@ export default function CreateActivityScreen({
                 <View key={entry.id} style={styles.historyItem}>
                   <Text style={styles.historyStatus}>{entry.status}</Text>
                   <Text style={styles.historyDate}>
-                    {formatDateInput(entry.changedAt)}
+                    {toDisplayDate(entry.changedAt)}
                   </Text>
 
                   {!!entry.note && (
@@ -261,7 +216,7 @@ export default function CreateActivityScreen({
 
                   {!!entry.postponedUntil && (
                     <Text style={styles.historyNote}>
-                      Adiada para: {formatDateInput(entry.postponedUntil)}
+                      Adiada para: {toDisplayDate(entry.postponedUntil)}
                     </Text>
                   )}
                 </View>

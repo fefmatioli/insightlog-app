@@ -10,12 +10,17 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { Activity, ActivityStatus } from '../data/mockActivities';
+import { Activity, ActivityCategory, ActivityStatus } from '../data/mockActivities';
 import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
 import { useActivities } from '../context/ActivitiesContext';
+import { isToday, normalizeDateInput, toDisplayDate, toISODate } from '../utils/date';
+import AppBrand from '../components/AppBrand';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Activities'>;
+type StatusFilter = ActivityStatus | 'Todas';
+type CategoryFilter = ActivityCategory | 'Todas';
+type DateFilter = 'Todas' | 'Hoje' | '7 dias' | '30 dias' | 'Personalizado';
 
 const categoryColors = {
   Estudo: colors.lavender,
@@ -52,67 +57,28 @@ const statusOptions: ActivityStatus[] = [
   'Adiada',
 ];
 
-function formatDate(dateString: string) {
-  const date = new Date(dateString);
+const statusFilterOptions: StatusFilter[] = [
+  'Todas',
+  'Pendente',
+  'Em andamento',
+  'Concluída',
+  'Adiada',
+];
 
-  return (
-    date.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: 'short',
-    }) +
-    ' • ' +
-    date.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  );
-}
+const categoryFilterOptions: CategoryFilter[] = [
+  'Todas',
+  'Estudo',
+  'Saúde',
+  'Social',
+];
 
-function formatDateTimeLocal(dateString: string) {
-  const date = new Date(dateString);
-
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-
-  return `${day}/${month}/${year}`;
-}
-
-function formatDateTimeInput(value: string) {
-  const digitsOnly = value.replace(/\D/g, '').slice(0, 8);
-
-  if (digitsOnly.length <= 2) return digitsOnly;
-  if (digitsOnly.length <= 4) {
-    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
-  }
-
-  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)}`;
-}
-
-function parseDateBR(value: string) {
-  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-
-  if (!match) return null;
-
-  const [, day, month, year] = match;
-
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
-
-  if (isNaN(date.getTime())) return null;
-
-  return date.toISOString();
-}
-
-function isToday(dateString: string) {
-  const date = new Date(dateString);
-  const today = new Date();
-
-  return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
-  );
-}
+const dateFilterOptions: DateFilter[] = [
+  'Todas',
+  'Hoje',
+  '7 dias',
+  '30 dias',
+  'Personalizado',
+];
 
 function getLatestPostponedEntry(activity: Activity) {
   const postponedEntries = activity.history.filter(
@@ -128,6 +94,12 @@ export default function ActivitiesScreen({ navigation }: Props) {
   const { activities, removeActivity, updateActivityStatus } = useActivities();
 
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('Todas');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('Todas');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('Todas');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [isStatusModalVisible, setIsStatusModalVisible] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<ActivityStatus>('Pendente');
@@ -136,25 +108,87 @@ export default function ActivitiesScreen({ navigation }: Props) {
 
   const filteredActivities = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const now = new Date();
+    const customStartISO =
+      dateFilter === 'Personalizado' ? toISODate(customStartDate) : null;
+    const customEndISO =
+      dateFilter === 'Personalizado' ? toISODate(customEndDate) : null;
 
     const sortedActivities = [...activities].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
-    if (!term) return sortedActivities;
-
     return sortedActivities.filter((item) => {
+      const createdAt = new Date(item.createdAt);
       const titleMatch = item.title.toLowerCase().includes(term);
-      const categoryMatch = item.category.toLowerCase().includes(term);
-      const descriptionMatch = item.description?.toLowerCase().includes(term);
-      const statusMatch = item.status.toLowerCase().includes(term);
+      const itemCategoryMatch = item.category.toLowerCase().includes(term);
+      const descriptionMatch =
+        item.description?.toLowerCase().includes(term) ?? false;
+      const itemStatusMatch = item.status.toLowerCase().includes(term);
 
-      return titleMatch || categoryMatch || descriptionMatch || statusMatch;
+      const matchesSearch =
+        !term || titleMatch || itemCategoryMatch || descriptionMatch || itemStatusMatch;
+
+      const matchesStatus =
+        statusFilter === 'Todas' || item.status === statusFilter;
+
+      const matchesCategory =
+        categoryFilter === 'Todas' || item.category === categoryFilter;
+
+      let matchesDate = true;
+
+      if (dateFilter === 'Hoje') {
+        matchesDate = isToday(item.createdAt);
+      } else if (dateFilter === '7 dias') {
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        matchesDate = createdAt >= sevenDaysAgo && createdAt <= now;
+      } else if (dateFilter === '30 dias') {
+        const thirtyDaysAgo = new Date(now);
+        thirtyDaysAgo.setHours(0, 0, 0, 0);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+        matchesDate = createdAt >= thirtyDaysAgo && createdAt <= now;
+      } else if (
+        dateFilter === 'Personalizado' &&
+        customStartISO &&
+        customEndISO
+      ) {
+        const startDate = new Date(customStartISO);
+        startDate.setHours(0, 0, 0, 0);
+
+        const endDate = new Date(customEndISO);
+        endDate.setHours(23, 59, 59, 999);
+
+        matchesDate = createdAt >= startDate && createdAt <= endDate;
+      }
+
+      return matchesSearch && matchesStatus && matchesCategory && matchesDate;
     });
-  }, [activities, search]);
+  }, [
+    activities,
+    search,
+    statusFilter,
+    categoryFilter,
+    dateFilter,
+    customStartDate,
+    customEndDate,
+  ]);
 
-  const totalActivities = activities.length;
-  const todayActivities = activities.filter((item) => isToday(item.createdAt)).length;
+  const totalActivities = filteredActivities.length;
+  const todayActivities = filteredActivities.filter((item) =>
+    isToday(item.createdAt)
+  ).length;
+  const hasActiveFilters =
+    !!search.trim() ||
+    statusFilter !== 'Todas' ||
+    categoryFilter !== 'Todas' ||
+    dateFilter !== 'Todas';
+  const activeFilterCount = [
+    statusFilter !== 'Todas',
+    categoryFilter !== 'Todas',
+    dateFilter !== 'Todas',
+  ].filter(Boolean).length;
 
   function openStatusModal(activity: Activity) {
     setSelectedActivity(activity);
@@ -167,7 +201,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
 
       if (latestPostponedEntry.postponedUntil) {
         setPostponeUntil(
-          formatDateTimeLocal(latestPostponedEntry.postponedUntil)
+          toDisplayDate(latestPostponedEntry.postponedUntil)
         );
       } else {
         setPostponeUntil('');
@@ -198,7 +232,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
     let postponedUntilISO: string | undefined = undefined;
 
     if (selectedStatus === 'Adiada') {
-      const parsedPostponeDate = parseDateBR(postponeUntil);
+      const parsedPostponeDate = toISODate(postponeUntil);
 
       if (!parsedPostponeDate) {
         return;
@@ -246,7 +280,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
               <Text style={styles.activityCategory}>{item.category}</Text>
             </View>
 
-            <Text style={styles.activityDate}>{formatDate(item.createdAt)}</Text>
+            <Text style={styles.activityDate}>{toDisplayDate(item.createdAt)}</Text>
           </View>
 
           <Pressable
@@ -281,7 +315,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
               {!!latestPostponedEntry.postponedUntil && (
                 <Text style={styles.postponeInfoText}>
                   Adiada para:{' '}
-                  {formatDateTimeLocal(latestPostponedEntry.postponedUntil)}
+                  {toDisplayDate(latestPostponedEntry.postponedUntil)}
                 </Text>
               )}
             </View>
@@ -313,16 +347,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.brandRow}>
-        <View>
-          <Text style={styles.appTitle}>InsightLog</Text>
-          <Text style={styles.subtitle}>Monitore suas atividades com leveza</Text>
-        </View>
-
-        <View style={styles.logoBadge}>
-          <Text style={styles.logoText}>IL</Text>
-        </View>
-      </View>
+      <AppBrand subtitle={`${totalActivities} ${totalActivities === 1 ? 'atividade' : 'atividades'}`} />
 
       <TextInput
         style={styles.searchInput}
@@ -331,6 +356,60 @@ export default function ActivitiesScreen({ navigation }: Props) {
         value={search}
         onChangeText={setSearch}
       />
+
+      <View style={styles.filtersBar}>
+        <Pressable
+          style={styles.filtersButton}
+          onPress={() => setIsFilterModalVisible(true)}
+        >
+          <Text style={styles.filtersButtonText}>
+            {activeFilterCount > 0
+              ? `Filtros (${activeFilterCount})`
+              : 'Filtrar resultados'}
+          </Text>
+        </Pressable>
+
+        {hasActiveFilters ? (
+          <Pressable
+            onPress={() => {
+              setSearch('');
+              setStatusFilter('Todas');
+              setCategoryFilter('Todas');
+              setDateFilter('Todas');
+              setCustomStartDate('');
+              setCustomEndDate('');
+            }}
+          >
+            <Text style={styles.clearFiltersText}>Limpar</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {activeFilterCount > 0 ? (
+        <View style={styles.activeFiltersRow}>
+          {statusFilter !== 'Todas' ? (
+            <View style={styles.activeFilterPill}>
+              <Text style={styles.activeFilterText}>{statusFilter}</Text>
+            </View>
+          ) : null}
+
+          {categoryFilter !== 'Todas' ? (
+            <View style={styles.activeFilterPill}>
+              <Text style={styles.activeFilterText}>{categoryFilter}</Text>
+            </View>
+          ) : null}
+
+          {dateFilter !== 'Todas' ? (
+            <View style={styles.activeFilterPill}>
+              <Text style={styles.activeFilterText}>
+                {dateFilter === 'Personalizado' && customStartDate && customEndDate
+                  ? `${customStartDate} - ${customEndDate}`
+                  : dateFilter}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.metricsRow}>
         <View style={[styles.metricCard, { backgroundColor: colors.primarySoft }]}>
@@ -367,6 +446,155 @@ export default function ActivitiesScreen({ navigation }: Props) {
       >
         <Text style={styles.fabText}>+</Text>
       </Pressable>
+
+      <Modal
+        visible={isFilterModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsFilterModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.filtersHeader}>
+              <Text style={styles.modalTitle}>Filtrar atividades</Text>
+              {hasActiveFilters ? (
+                <Pressable
+                  onPress={() => {
+                    setSearch('');
+                    setStatusFilter('Todas');
+                    setCategoryFilter('Todas');
+                    setDateFilter('Todas');
+                    setCustomStartDate('');
+                    setCustomEndDate('');
+                  }}
+                >
+                  <Text style={styles.clearFiltersText}>Limpar</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Refine a lista sem ocupar a tela principal.
+            </Text>
+
+            <Text style={styles.filterLabel}>Status</Text>
+            <View style={styles.filterOptionsRow}>
+              {statusFilterOptions.map((option) => {
+                const selected = statusFilter === option;
+
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => setStatusFilter(option)}
+                    style={[
+                      styles.filterChip,
+                      selected && styles.filterChipSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selected && styles.filterChipTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.filterLabel}>Categoria</Text>
+            <View style={styles.filterOptionsRow}>
+              {categoryFilterOptions.map((option) => {
+                const selected = categoryFilter === option;
+
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => setCategoryFilter(option)}
+                    style={[
+                      styles.filterChip,
+                      selected && styles.filterChipSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selected && styles.filterChipTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.filterLabel}>Data</Text>
+            <View style={styles.filterOptionsRow}>
+              {dateFilterOptions.map((option) => {
+                const selected = dateFilter === option;
+
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => setDateFilter(option)}
+                    style={[
+                      styles.filterChip,
+                      selected && styles.filterChipSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selected && styles.filterChipTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {dateFilter === 'Personalizado' ? (
+              <View style={styles.customDateRow}>
+                <TextInput
+                  style={[styles.searchInput, styles.customDateInput]}
+                  placeholder="Início: dd/mm/aaaa"
+                  placeholderTextColor={colors.textSecondary}
+                  value={customStartDate}
+                  onChangeText={(value) =>
+                    setCustomStartDate(normalizeDateInput(value))
+                  }
+                  keyboardType="numeric"
+                />
+
+                <TextInput
+                  style={[styles.searchInput, styles.customDateInput]}
+                  placeholder="Fim: dd/mm/aaaa"
+                  placeholderTextColor={colors.textSecondary}
+                  value={customEndDate}
+                  onChangeText={(value) =>
+                    setCustomEndDate(normalizeDateInput(value))
+                  }
+                  keyboardType="numeric"
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setIsFilterModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Fechar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={isStatusModalVisible}
@@ -428,7 +656,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
                   placeholderTextColor={colors.textSecondary}
                   value={postponeUntil}
                   onChangeText={(value) =>
-                    setPostponeUntil(formatDateTimeInput(value))
+                    setPostponeUntil(normalizeDateInput(value))
                   }
                   keyboardType="numeric"
                 />
@@ -503,6 +731,97 @@ const styles = StyleSheet.create({
     color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  filtersBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  filtersButton: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filtersButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  filtersHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  filtersTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  clearFiltersText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  activeFiltersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  activeFilterPill: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.pill,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  activeFilterText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  customDateRow: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  customDateInput: {
+    marginBottom: 0,
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  filterOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  filterChip: {
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.pill,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterChipSelected: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryDark,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  filterChipTextSelected: {
+    color: colors.primaryDark,
   },
   metricsRow: {
     flexDirection: 'row',

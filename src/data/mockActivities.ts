@@ -30,19 +30,11 @@ export const mockActivities: Activity[] = [
     title: 'Leitura de React Native',
     category: 'Estudo',
     description: 'Revisão dos conceitos iniciais.',
-    createdAt: '2026-04-22T10:30:00.000Z',
+    createdAt: '2026-04-22T00:00:00',
     status: 'Em andamento',
     history: [
-      {
-        id: 'h1',
-        status: 'Pendente',
-        changedAt: '2026-04-22T09:00:00.000Z',
-      },
-      {
-        id: 'h2',
-        status: 'Em andamento',
-        changedAt: '2026-04-22T10:30:00.000Z',
-      },
+      { id: 'h1', status: 'Pendente', changedAt: '2026-04-22T00:00:00' },
+      { id: 'h2', status: 'Em andamento', changedAt: '2026-04-22T00:00:00' },
     ],
   },
   {
@@ -50,19 +42,11 @@ export const mockActivities: Activity[] = [
     title: 'Corrida matinal',
     category: 'Saúde',
     description: '30 minutos de atividade física.',
-    createdAt: '2026-04-21T18:00:00.000Z',
+    createdAt: '2026-04-21T00:00:00',
     status: 'Concluída',
     history: [
-      {
-        id: 'h3',
-        status: 'Pendente',
-        changedAt: '2026-04-21T17:00:00.000Z',
-      },
-      {
-        id: 'h4',
-        status: 'Concluída',
-        changedAt: '2026-04-21T18:00:00.000Z',
-      },
+      { id: 'h3', status: 'Pendente', changedAt: '2026-04-21T00:00:00' },
+      { id: 'h4', status: 'Concluída', changedAt: '2026-04-21T00:00:00' },
     ],
   },
   {
@@ -70,19 +54,11 @@ export const mockActivities: Activity[] = [
     title: 'Resumo de banco de dados',
     category: 'Estudo',
     description: 'Montar resumo para prova.',
-    createdAt: '2026-04-20T14:00:00.000Z',
+    createdAt: '2026-04-20T00:00:00',
     status: 'Concluída',
     history: [
-      {
-        id: 'h5',
-        status: 'Pendente',
-        changedAt: '2026-04-20T10:00:00.000Z',
-      },
-      {
-        id: 'h6',
-        status: 'Concluída',
-        changedAt: '2026-04-20T14:00:00.000Z',
-      },
+      { id: 'h5', status: 'Pendente', changedAt: '2026-04-20T00:00:00' },
+      { id: 'h6', status: 'Concluída', changedAt: '2026-04-20T00:00:00' },
     ],
   },
   {
@@ -90,14 +66,10 @@ export const mockActivities: Activity[] = [
     title: 'Caminhada no parque',
     category: 'Saúde',
     description: '40 minutos no fim da tarde.',
-    createdAt: '2026-04-19T17:40:00.000Z',
+    createdAt: '2026-04-19T00:00:00',
     status: 'Pendente',
     history: [
-      {
-        id: 'h7',
-        status: 'Pendente',
-        changedAt: '2026-04-19T17:40:00.000Z',
-      },
+      { id: 'h7', status: 'Pendente', changedAt: '2026-04-19T00:00:00' },
     ],
   },
   {
@@ -105,20 +77,16 @@ export const mockActivities: Activity[] = [
     title: 'Encontro com amigas',
     category: 'Social',
     description: 'Café no centro.',
-    createdAt: '2026-04-18T19:30:00.000Z',
+    createdAt: '2026-04-18T00:00:00',
     status: 'Adiada',
     history: [
-      {
-        id: 'h8',
-        status: 'Pendente',
-        changedAt: '2026-04-18T15:00:00.000Z',
-      },
+      { id: 'h8', status: 'Pendente', changedAt: '2026-04-18T00:00:00' },
       {
         id: 'h9',
         status: 'Adiada',
-        changedAt: '2026-04-18T17:00:00.000Z',
+        changedAt: '2026-04-18T00:00:00',
         note: 'Conflito de horário.',
-        postponedUntil: '2026-04-25T00:00:00.000Z',
+        postponedUntil: '2026-04-25T00:00:00',
       },
     ],
   },
@@ -127,19 +95,11 @@ export const mockActivities: Activity[] = [
     title: 'Planejamento semanal',
     category: 'Estudo',
     description: 'Organizar entregas da semana.',
-    createdAt: '2026-04-17T08:20:00.000Z',
+    createdAt: '2026-04-17T00:00:00',
     status: 'Em andamento',
     history: [
-      {
-        id: 'h10',
-        status: 'Pendente',
-        changedAt: '2026-04-17T08:00:00.000Z',
-      },
-      {
-        id: 'h11',
-        status: 'Em andamento',
-        changedAt: '2026-04-17T08:20:00.000Z',
-      },
+      { id: 'h10', status: 'Pendente', changedAt: '2026-04-17T00:00:00' },
+      { id: 'h11', status: 'Em andamento', changedAt: '2026-04-17T00:00:00' },
     ],
   },
   {
@@ -147,19 +107,11 @@ export const mockActivities: Activity[] = [
     title: 'Consulta médica',
     category: 'Saúde',
     description: 'Retorno de rotina.',
-    createdAt: '2026-04-15T11:00:00.000Z',
+    createdAt: '2026-04-15T00:00:00',
     status: 'Concluída',
     history: [
-      {
-        id: 'h12',
-        status: 'Pendente',
-        changedAt: '2026-04-15T09:00:00.000Z',
-      },
-      {
-        id: 'h13',
-        status: 'Concluída',
-        changedAt: '2026-04-15T11:00:00.000Z',
-      },
+      { id: 'h12', status: 'Pendente', changedAt: '2026-04-15T00:00:00' },
+      { id: 'h13', status: 'Concluída', changedAt: '2026-04-15T00:00:00' },
     ],
   },
   {
@@ -167,19 +119,11 @@ export const mockActivities: Activity[] = [
     title: 'Responder mensagens atrasadas',
     category: 'Social',
     description: 'Responder contatos do fim de semana.',
-    createdAt: '2026-04-14T21:15:00.000Z',
+    createdAt: '2026-04-14T00:00:00',
     status: 'Em andamento',
     history: [
-      {
-        id: 'h14',
-        status: 'Pendente',
-        changedAt: '2026-04-14T20:00:00.000Z',
-      },
-      {
-        id: 'h15',
-        status: 'Em andamento',
-        changedAt: '2026-04-14T21:15:00.000Z',
-      },
+      { id: 'h14', status: 'Pendente', changedAt: '2026-04-14T00:00:00' },
+      { id: 'h15', status: 'Em andamento', changedAt: '2026-04-14T00:00:00' },
     ],
   },
   {
@@ -187,20 +131,16 @@ export const mockActivities: Activity[] = [
     title: 'Leitura de artigo científico',
     category: 'Estudo',
     description: 'Leitura para embasar o projeto.',
-    createdAt: '2026-04-12T16:45:00.000Z',
+    createdAt: '2026-04-12T00:00:00',
     status: 'Adiada',
     history: [
-      {
-        id: 'h16',
-        status: 'Pendente',
-        changedAt: '2026-04-12T10:00:00.000Z',
-      },
+      { id: 'h16', status: 'Pendente', changedAt: '2026-04-12T00:00:00' },
       {
         id: 'h17',
         status: 'Adiada',
-        changedAt: '2026-04-12T16:45:00.000Z',
+        changedAt: '2026-04-12T00:00:00',
         note: 'Prioridade mudou no dia.',
-        postponedUntil: '2026-04-26T00:00:00.000Z',
+        postponedUntil: '2026-04-26T00:00:00',
       },
     ],
   },
@@ -209,19 +149,11 @@ export const mockActivities: Activity[] = [
     title: 'Alongamento matinal',
     category: 'Saúde',
     description: '15 minutos antes do trabalho.',
-    createdAt: '2026-04-10T07:15:00.000Z',
+    createdAt: '2026-04-10T00:00:00',
     status: 'Concluída',
     history: [
-      {
-        id: 'h18',
-        status: 'Pendente',
-        changedAt: '2026-04-10T07:00:00.000Z',
-      },
-      {
-        id: 'h19',
-        status: 'Concluída',
-        changedAt: '2026-04-10T07:15:00.000Z',
-      },
+      { id: 'h18', status: 'Pendente', changedAt: '2026-04-10T00:00:00' },
+      { id: 'h19', status: 'Concluída', changedAt: '2026-04-10T00:00:00' },
     ],
   },
   {
@@ -229,14 +161,10 @@ export const mockActivities: Activity[] = [
     title: 'Organizar fotos',
     category: 'Social',
     description: 'Separar fotos do último passeio.',
-    createdAt: '2026-04-08T20:10:00.000Z',
+    createdAt: '2026-04-08T00:00:00',
     status: 'Pendente',
     history: [
-      {
-        id: 'h20',
-        status: 'Pendente',
-        changedAt: '2026-04-08T20:10:00.000Z',
-      },
+      { id: 'h20', status: 'Pendente', changedAt: '2026-04-08T00:00:00' },
     ],
   },
   {
@@ -244,19 +172,11 @@ export const mockActivities: Activity[] = [
     title: 'Resolver lista da disciplina',
     category: 'Estudo',
     description: 'Exercícios pendentes da semana.',
-    createdAt: '2026-04-05T13:30:00.000Z',
+    createdAt: '2026-04-05T00:00:00',
     status: 'Concluída',
     history: [
-      {
-        id: 'h21',
-        status: 'Pendente',
-        changedAt: '2026-04-05T09:00:00.000Z',
-      },
-      {
-        id: 'h22',
-        status: 'Concluída',
-        changedAt: '2026-04-05T13:30:00.000Z',
-      },
+      { id: 'h21', status: 'Pendente', changedAt: '2026-04-05T00:00:00' },
+      { id: 'h22', status: 'Concluída', changedAt: '2026-04-05T00:00:00' },
     ],
   },
 ];
