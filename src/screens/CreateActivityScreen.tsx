@@ -12,48 +12,62 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
-import { ActivityCategory } from '../data/mockActivities';
+import {
+  ActivityCategory,
+  ActivityStatus,
+} from '../data/mockActivities';
 import { useActivities } from '../context/ActivitiesContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateActivity'>;
 type Category = ActivityCategory;
+type Status = ActivityStatus;
 
-function formatDateTimeLocal(dateString: string) {
-  const date = new Date(dateString);
+function formatDateInput(value: string) {
+  const digitsOnly = value.replace(/\D/g, '').slice(0, 8);
 
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
+  if (digitsOnly.length <= 2) return digitsOnly;
+  if (digitsOnly.length <= 4) {
+    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
+  }
 
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-
-  return `${day}/${month}/${year} ${hours}:${minutes}`;
+  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)}`;
 }
 
-function parseDateTimeBR(value: string) {
-  const match = value.match(
-    /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/
-  );
+function parseDateBR(value: string) {
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
 
   if (!match) return null;
 
-  const [, day, month, year, hour, minute] = match;
+  const [, day, month, year] = match;
 
-  const date = new Date(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    Number(hour),
-    Number(minute)
-  );
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
 
   if (isNaN(date.getTime())) return null;
 
   return date.toISOString();
 }
 
-export default function CreateActivityScreen({ navigation, route }: Props) {
+function formatDateTimeInput(value: string) {
+  const digitsOnly = value.replace(/\D/g, '').slice(0, 12);
+
+  if (digitsOnly.length <= 2) return digitsOnly;
+  if (digitsOnly.length <= 4) {
+    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
+  }
+  if (digitsOnly.length <= 8) {
+    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4)}`;
+  }
+  if (digitsOnly.length <= 10) {
+    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)} ${digitsOnly.slice(8)}`;
+  }
+
+  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)} ${digitsOnly.slice(8, 10)}:${digitsOnly.slice(10, 12)}`;
+}
+
+export default function CreateActivityScreen({
+  navigation,
+  route,
+}: Props) {
   const { activities, addActivity, updateActivity } = useActivities();
 
   const activityId = route.params?.activityId;
@@ -68,6 +82,7 @@ export default function CreateActivityScreen({ navigation, route }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<Category>('Estudo');
+  const [status, setStatus] = useState<Status>('Pendente');
   const [dateTime, setDateTime] = useState('');
 
   useEffect(() => {
@@ -75,12 +90,14 @@ export default function CreateActivityScreen({ navigation, route }: Props) {
       setTitle(activityToEdit.title);
       setDescription(activityToEdit.description || '');
       setCategory(activityToEdit.category);
-      setDateTime(formatDateTimeLocal(activityToEdit.createdAt));
+      setStatus(activityToEdit.status);
+      setDateTime(formatDateInput(activityToEdit.createdAt));
     } else {
       setTitle('');
       setDescription('');
       setCategory('Estudo');
-      setDateTime(formatDateTimeLocal(new Date().toISOString()));
+      setStatus('Pendente');
+      setDateTime(formatDateInput(new Date().toISOString()));
     }
   }, [activityToEdit]);
 
@@ -90,7 +107,7 @@ export default function CreateActivityScreen({ navigation, route }: Props) {
       return;
     }
 
-    const parsedDate = parseDateTimeBR(dateTime);
+    const parsedDate = parseDateBR(dateTime);
 
     if (!parsedDate) {
       Alert.alert(
@@ -104,6 +121,7 @@ export default function CreateActivityScreen({ navigation, route }: Props) {
       title,
       description,
       category,
+      status,
       createdAt: parsedDate,
     };
 
@@ -148,24 +166,52 @@ export default function CreateActivityScreen({ navigation, route }: Props) {
         />
 
         <Text style={styles.label}>Categoria</Text>
-        <View style={styles.categoryRow}>
-          <CategoryButton
+        <View style={styles.rowWrap}>
+          <SelectChip
             label="Estudo"
             selected={category === 'Estudo'}
             onPress={() => setCategory('Estudo')}
-            color={colors.lavender}
+            backgroundColor={colors.lavender}
           />
-          <CategoryButton
+          <SelectChip
             label="Saúde"
             selected={category === 'Saúde'}
             onPress={() => setCategory('Saúde')}
-            color={colors.mint}
+            backgroundColor={colors.mint}
           />
-          <CategoryButton
+          <SelectChip
             label="Social"
             selected={category === 'Social'}
             onPress={() => setCategory('Social')}
-            color={colors.rose}
+            backgroundColor={colors.rose}
+          />
+        </View>
+
+        <Text style={styles.label}>Status</Text>
+        <View style={styles.rowWrap}>
+          <SelectChip
+            label="Pendente"
+            selected={status === 'Pendente'}
+            onPress={() => setStatus('Pendente')}
+            backgroundColor="#F3EDF7"
+          />
+          <SelectChip
+            label="Em andamento"
+            selected={status === 'Em andamento'}
+            onPress={() => setStatus('Em andamento')}
+            backgroundColor="#E6F0FF"
+          />
+          <SelectChip
+            label="Concluída"
+            selected={status === 'Concluída'}
+            onPress={() => setStatus('Concluída')}
+            backgroundColor="#E2F4EA"
+          />
+          <SelectChip
+            label="Adiada"
+            selected={status === 'Adiada'}
+            onPress={() => setStatus('Adiada')}
+            backgroundColor="#FCEBDE"
           />
         </View>
 
@@ -184,9 +230,10 @@ export default function CreateActivityScreen({ navigation, route }: Props) {
         <TextInput
           style={styles.input}
           value={dateTime}
-          onChangeText={setDateTime}
-          placeholder="dd/mm/aaaa hh:mm"
+          onChangeText={(value) => setDateTime(formatDateTimeInput(value))}
+          placeholder="dd/mm/aaaa"
           placeholderTextColor={colors.textSecondary}
+          keyboardType="numeric"
         />
 
         <Pressable style={styles.saveButton} onPress={handleSave}>
@@ -194,34 +241,62 @@ export default function CreateActivityScreen({ navigation, route }: Props) {
             {isEditing ? 'Salvar Alterações' : 'Salvar Atividade'}
           </Text>
         </Pressable>
+
+        {isEditing && activityToEdit?.history?.length ? (
+          <>
+            <Text style={styles.label}>Histórico</Text>
+            <View style={styles.historyBox}>
+              {activityToEdit.history.map((entry) => (
+                <View key={entry.id} style={styles.historyItem}>
+                  <Text style={styles.historyStatus}>{entry.status}</Text>
+                  <Text style={styles.historyDate}>
+                    {formatDateInput(entry.changedAt)}
+                  </Text>
+
+                  {!!entry.note && (
+                    <Text style={styles.historyNote}>
+                      Motivo: {entry.note}
+                    </Text>
+                  )}
+
+                  {!!entry.postponedUntil && (
+                    <Text style={styles.historyNote}>
+                      Adiada para: {formatDateInput(entry.postponedUntil)}
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
       </View>
     </ScrollView>
   );
 }
 
-type CategoryButtonProps = {
-  label: Category;
+type SelectChipProps = {
+  label: string;
   selected: boolean;
   onPress: () => void;
-  color: string;
+  backgroundColor: string;
 };
 
-function CategoryButton({
+function SelectChip({
   label,
   selected,
   onPress,
-  color,
-}: CategoryButtonProps) {
+  backgroundColor,
+}: SelectChipProps) {
   return (
     <Pressable
       onPress={onPress}
       style={[
-        styles.categoryButton,
-        { backgroundColor: color },
-        selected && styles.categoryButtonSelected,
+        styles.chip,
+        { backgroundColor },
+        selected && styles.chipSelected,
       ]}
     >
-      <Text style={styles.categoryButtonText}>{label}</Text>
+      <Text style={styles.chipText}>{label}</Text>
     </Pressable>
   );
 }
@@ -287,23 +362,24 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 120,
   },
-  categoryRow: {
+  rowWrap: {
     flexDirection: 'row',
     gap: spacing.sm,
     flexWrap: 'wrap',
   },
-  categoryButton: {
+  chip: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: radius.pill,
   },
-  categoryButtonSelected: {
+  chipSelected: {
     borderWidth: 1.5,
     borderColor: colors.primaryDark,
   },
-  categoryButtonText: {
+  chipText: {
     color: colors.text,
     fontWeight: '600',
+    fontSize: 13,
   },
   saveButton: {
     backgroundColor: colors.primary,
@@ -317,5 +393,29 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontSize: 16,
     fontWeight: '700',
+  },
+  historyBox: {
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  historyItem: {
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  historyStatus: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  historyDate: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  historyNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
 });
