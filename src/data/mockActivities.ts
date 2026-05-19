@@ -20,7 +20,11 @@ export type Activity = {
   category: ActivityCategory;
   description?: string;
   createdAt: string;
+  activityTime?: string;
   status: ActivityStatus;
+  reminderEnabled: boolean;
+  reminderOffsetMinutes?: number;
+  notificationId?: string;
   history: ActivityHistoryEntry[];
 };
 
@@ -32,6 +36,7 @@ export const mockActivities: Activity[] = [
     description: 'Revisão dos conceitos iniciais.',
     createdAt: '2026-04-22T00:00:00',
     status: 'Em andamento',
+    reminderEnabled: false,
     history: [
       { id: 'h1', status: 'Pendente', changedAt: '2026-04-22T00:00:00' },
       { id: 'h2', status: 'Em andamento', changedAt: '2026-04-22T00:00:00' },
@@ -44,6 +49,7 @@ export const mockActivities: Activity[] = [
     description: '30 minutos de atividade física.',
     createdAt: '2026-04-21T00:00:00',
     status: 'Concluída',
+    reminderEnabled: false,
     history: [
       { id: 'h3', status: 'Pendente', changedAt: '2026-04-21T00:00:00' },
       { id: 'h4', status: 'Concluída', changedAt: '2026-04-21T00:00:00' },
@@ -56,6 +62,7 @@ export const mockActivities: Activity[] = [
     description: 'Montar resumo para prova.',
     createdAt: '2026-04-20T00:00:00',
     status: 'Concluída',
+    reminderEnabled: false,
     history: [
       { id: 'h5', status: 'Pendente', changedAt: '2026-04-20T00:00:00' },
       { id: 'h6', status: 'Concluída', changedAt: '2026-04-20T00:00:00' },
@@ -68,6 +75,7 @@ export const mockActivities: Activity[] = [
     description: '40 minutos no fim da tarde.',
     createdAt: '2026-04-19T00:00:00',
     status: 'Pendente',
+    reminderEnabled: false,
     history: [
       { id: 'h7', status: 'Pendente', changedAt: '2026-04-19T00:00:00' },
     ],
@@ -79,6 +87,7 @@ export const mockActivities: Activity[] = [
     description: 'Café no centro.',
     createdAt: '2026-04-18T00:00:00',
     status: 'Adiada',
+    reminderEnabled: false,
     history: [
       { id: 'h8', status: 'Pendente', changedAt: '2026-04-18T00:00:00' },
       {
@@ -97,6 +106,7 @@ export const mockActivities: Activity[] = [
     description: 'Organizar entregas da semana.',
     createdAt: '2026-04-17T00:00:00',
     status: 'Em andamento',
+    reminderEnabled: false,
     history: [
       { id: 'h10', status: 'Pendente', changedAt: '2026-04-17T00:00:00' },
       { id: 'h11', status: 'Em andamento', changedAt: '2026-04-17T00:00:00' },
@@ -109,6 +119,7 @@ export const mockActivities: Activity[] = [
     description: 'Retorno de rotina.',
     createdAt: '2026-04-15T00:00:00',
     status: 'Concluída',
+    reminderEnabled: false,
     history: [
       { id: 'h12', status: 'Pendente', changedAt: '2026-04-15T00:00:00' },
       { id: 'h13', status: 'Concluída', changedAt: '2026-04-15T00:00:00' },
@@ -121,6 +132,7 @@ export const mockActivities: Activity[] = [
     description: 'Responder contatos do fim de semana.',
     createdAt: '2026-04-14T00:00:00',
     status: 'Em andamento',
+    reminderEnabled: false,
     history: [
       { id: 'h14', status: 'Pendente', changedAt: '2026-04-14T00:00:00' },
       { id: 'h15', status: 'Em andamento', changedAt: '2026-04-14T00:00:00' },
@@ -133,6 +145,7 @@ export const mockActivities: Activity[] = [
     description: 'Leitura para embasar o projeto.',
     createdAt: '2026-04-12T00:00:00',
     status: 'Adiada',
+    reminderEnabled: false,
     history: [
       { id: 'h16', status: 'Pendente', changedAt: '2026-04-12T00:00:00' },
       {
@@ -151,6 +164,7 @@ export const mockActivities: Activity[] = [
     description: '15 minutos antes do trabalho.',
     createdAt: '2026-04-10T00:00:00',
     status: 'Concluída',
+    reminderEnabled: false,
     history: [
       { id: 'h18', status: 'Pendente', changedAt: '2026-04-10T00:00:00' },
       { id: 'h19', status: 'Concluída', changedAt: '2026-04-10T00:00:00' },
@@ -163,6 +177,7 @@ export const mockActivities: Activity[] = [
     description: 'Separar fotos do último passeio.',
     createdAt: '2026-04-08T00:00:00',
     status: 'Pendente',
+    reminderEnabled: false,
     history: [
       { id: 'h20', status: 'Pendente', changedAt: '2026-04-08T00:00:00' },
     ],
@@ -174,6 +189,7 @@ export const mockActivities: Activity[] = [
     description: 'Exercícios pendentes da semana.',
     createdAt: '2026-04-05T00:00:00',
     status: 'Concluída',
+    reminderEnabled: false,
     history: [
       { id: 'h21', status: 'Pendente', changedAt: '2026-04-05T00:00:00' },
       { id: 'h22', status: 'Concluída', changedAt: '2026-04-05T00:00:00' },

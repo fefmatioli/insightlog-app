@@ -28,6 +28,26 @@ export function normalizeDateInput(value: string) {
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
 }
 
+export function normalizeTimeInput(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 4);
+
+  if (digits.length <= 2) return digits;
+
+  return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+}
+
+export function isValidTime(time: string) {
+  const match = time.match(/^(\d{2}):(\d{2})$/);
+
+  if (!match) return false;
+
+  const [, hours, minutes] = match;
+  const h = Number(hours);
+  const m = Number(minutes);
+
+  return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+}
+
 export function toISODate(displayDate: string) {
   const match = displayDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
 

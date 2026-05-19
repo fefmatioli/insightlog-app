@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -8,7 +9,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { Activity, ActivityCategory, ActivityStatus } from '../data/mockActivities';
 import { colors } from '../theme/colors';
@@ -22,7 +25,7 @@ type StatusFilter = ActivityStatus | 'Todas';
 type CategoryFilter = ActivityCategory | 'Todas';
 type DateFilter = 'Todas' | 'Hoje' | '7 dias' | '30 dias' | 'Personalizado';
 
-const categoryColors = {
+const categoryColors: Record<ActivityCategory, string> = {
   Estudo: colors.lavender,
   Saúde: colors.mint,
   Social: colors.rose,
@@ -90,6 +93,29 @@ function getLatestPostponedEntry(activity: Activity) {
   return postponedEntries[postponedEntries.length - 1];
 }
 
+function getReminderLabel(activity: Activity) {
+  if (!activity.reminderEnabled) return null;
+
+  if (!activity.activityTime) {
+    return 'Lembrete 09:00';
+  }
+
+  if (activity.reminderOffsetMinutes === undefined) {
+    return `Lembrete ${activity.activityTime}`;
+  }
+
+  if (activity.reminderOffsetMinutes === 0) {
+    return `No horario ${activity.activityTime}`;
+  }
+
+  if (activity.reminderOffsetMinutes < 60) {
+    return `${activity.reminderOffsetMinutes} min antes`;
+  }
+
+  const hours = activity.reminderOffsetMinutes / 60;
+  return `${hours}h antes`;
+}
+
 export default function ActivitiesScreen({ navigation }: Props) {
   const { activities, removeActivity, updateActivityStatus } = useActivities();
 
@@ -105,6 +131,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
   const [selectedStatus, setSelectedStatus] = useState<ActivityStatus>('Pendente');
   const [postponeNote, setPostponeNote] = useState('');
   const [postponeUntil, setPostponeUntil] = useState('');
+  const longPressHandledRef = useRef<string | null>(null);
 
   const filteredActivities = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -127,7 +154,11 @@ export default function ActivitiesScreen({ navigation }: Props) {
       const itemStatusMatch = item.status.toLowerCase().includes(term);
 
       const matchesSearch =
-        !term || titleMatch || itemCategoryMatch || descriptionMatch || itemStatusMatch;
+        !term ||
+        titleMatch ||
+        itemCategoryMatch ||
+        descriptionMatch ||
+        itemStatusMatch;
 
       const matchesStatus =
         statusFilter === 'Todas' || item.status === statusFilter;
@@ -190,6 +221,15 @@ export default function ActivitiesScreen({ navigation }: Props) {
     dateFilter !== 'Todas',
   ].filter(Boolean).length;
 
+  function resetFilters() {
+    setSearch('');
+    setStatusFilter('Todas');
+    setCategoryFilter('Todas');
+    setDateFilter('Todas');
+    setCustomStartDate('');
+    setCustomEndDate('');
+  }
+
   function openStatusModal(activity: Activity) {
     setSelectedActivity(activity);
     setSelectedStatus(activity.status);
@@ -200,9 +240,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
       setPostponeNote(latestPostponedEntry.note || '');
 
       if (latestPostponedEntry.postponedUntil) {
-        setPostponeUntil(
-          toDisplayDate(latestPostponedEntry.postponedUntil)
-        );
+        setPostponeUntil(toDisplayDate(latestPostponedEntry.postponedUntil));
       } else {
         setPostponeUntil('');
       }
@@ -221,7 +259,45 @@ export default function ActivitiesScreen({ navigation }: Props) {
     setPostponeUntil('');
   }
 
-  function handleConfirmStatusUpdate() {
+  function confirmDeleteActivity(activity: Activity) {
+    Alert.alert(
+      'Excluir atividade',
+      `Deseja realmente excluir "${activity.title}"?`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => {
+            void removeActivity(activity.id);
+          },
+        },
+      ]
+    );
+  }
+
+  function openActivityActions(activity: Activity) {
+    Alert.alert(
+      activity.title,
+      'Escolha uma ação para esta atividade.',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => confirmDeleteActivity(activity),
+        },
+      ]
+    );
+  }
+
+  async function handleConfirmStatusUpdate() {
     if (!selectedActivity) return;
 
     let note =
@@ -229,12 +305,13 @@ export default function ActivitiesScreen({ navigation }: Props) {
         ? postponeNote.trim() || 'Atividade adiada'
         : `Status alterado para ${selectedStatus}`;
 
-    let postponedUntilISO: string | undefined = undefined;
+    let postponedUntilISO: string | undefined;
 
     if (selectedStatus === 'Adiada') {
       const parsedPostponeDate = toISODate(postponeUntil);
 
       if (!parsedPostponeDate) {
+        Alert.alert('Data inválida', 'Informe uma nova data válida para o adiamento.');
         return;
       }
 
@@ -242,7 +319,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
       note = postponeNote.trim() || 'Atividade adiada para outra data';
     }
 
-    updateActivityStatus(
+    await updateActivityStatus(
       selectedActivity.id,
       selectedStatus,
       note,
@@ -256,9 +333,30 @@ export default function ActivitiesScreen({ navigation }: Props) {
     const currentStatusStyle = statusStyles[item.status];
     const isCompleted = item.status === 'Concluída';
     const latestPostponedEntry = getLatestPostponedEntry(item);
+    const reminderLabel = getReminderLabel(item);
 
     return (
-      <View style={[styles.activityCard, isCompleted && styles.completedCard]}>
+      <Pressable
+        onPress={() => {
+          if (longPressHandledRef.current === item.id) {
+            longPressHandledRef.current = null;
+            return;
+          }
+
+          navigation.navigate('CreateActivity', {
+            activityId: item.id,
+          });
+        }}
+        onLongPress={() => {
+          longPressHandledRef.current = item.id;
+          openActivityActions(item);
+        }}
+        style={({ pressed }) => [
+          styles.activityCard,
+          isCompleted && styles.completedCard,
+          pressed && styles.activityCardPressed,
+        ]}
+      >
         <View
           style={[
             styles.iconBadge,
@@ -280,25 +378,36 @@ export default function ActivitiesScreen({ navigation }: Props) {
               <Text style={styles.activityCategory}>{item.category}</Text>
             </View>
 
-            <Text style={styles.activityDate}>{toDisplayDate(item.createdAt)}</Text>
+            <Text style={styles.activityDate}>
+              {toDisplayDate(item.createdAt)}
+              {item.activityTime ? `\n${item.activityTime}` : ''}
+            </Text>
           </View>
 
-          <Pressable
-            onPress={() => openStatusModal(item)}
-            style={[
-              styles.statusBadge,
-              { backgroundColor: currentStatusStyle.backgroundColor },
-            ]}
-          >
-            <Text
+          <View style={styles.statusRow}>
+            <Pressable
+              onPress={() => openStatusModal(item)}
               style={[
-                styles.statusBadgeText,
-                { color: currentStatusStyle.textColor },
+                styles.statusBadge,
+                { backgroundColor: currentStatusStyle.backgroundColor },
               ]}
             >
-              {item.status}
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.statusBadgeText,
+                  { color: currentStatusStyle.textColor },
+                ]}
+              >
+                {item.status}
+              </Text>
+            </Pressable>
+
+            {reminderLabel ? (
+              <View style={styles.reminderBadge}>
+                <Text style={styles.reminderBadgeText}>{reminderLabel}</Text>
+              </View>
+            ) : null}
+          </View>
 
           {!!item.description && (
             <Text style={styles.activityDescription}>{item.description}</Text>
@@ -314,412 +423,353 @@ export default function ActivitiesScreen({ navigation }: Props) {
 
               {!!latestPostponedEntry.postponedUntil && (
                 <Text style={styles.postponeInfoText}>
-                  Adiada para:{' '}
-                  {toDisplayDate(latestPostponedEntry.postponedUntil)}
+                  Adiada para: {toDisplayDate(latestPostponedEntry.postponedUntil)}
                 </Text>
               )}
             </View>
           )}
-
-          <View style={styles.actionsRow}>
-            <Pressable
-              style={[styles.actionButton, styles.editButton]}
-              onPress={() =>
-                navigation.navigate('CreateActivity', {
-                  activityId: item.id,
-                })
-              }
-            >
-              <Text style={styles.editButtonText}>Editar</Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.actionButton, styles.deleteButton]}
-              onPress={() => removeActivity(item.id)}
-            >
-              <Text style={styles.deleteButtonText}>Excluir</Text>
-            </Pressable>
-          </View>
         </View>
-      </View>
+      </Pressable>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <AppBrand subtitle={`${totalActivities} ${totalActivities === 1 ? 'atividade' : 'atividades'}`} />
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={styles.container}>
+        <AppBrand
+          subtitle={`${totalActivities} ${totalActivities === 1 ? 'atividade' : 'atividades'}`}
+        />
 
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Pesquisar atividades..."
-        placeholderTextColor={colors.textSecondary}
-        value={search}
-        onChangeText={setSearch}
-      />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Pesquisar atividades..."
+          placeholderTextColor={colors.textSecondary}
+          value={search}
+          onChangeText={setSearch}
+        />
 
-      <View style={styles.filtersBar}>
-        <Pressable
-          style={styles.filtersButton}
-          onPress={() => setIsFilterModalVisible(true)}
-        >
-          <Text style={styles.filtersButtonText}>
-            {activeFilterCount > 0
-              ? `Filtros (${activeFilterCount})`
-              : 'Filtrar resultados'}
-          </Text>
-        </Pressable>
-
-        {hasActiveFilters ? (
+        <View style={styles.filtersBar}>
           <Pressable
-            onPress={() => {
-              setSearch('');
-              setStatusFilter('Todas');
-              setCategoryFilter('Todas');
-              setDateFilter('Todas');
-              setCustomStartDate('');
-              setCustomEndDate('');
-            }}
+            style={styles.filtersButton}
+            onPress={() => setIsFilterModalVisible(true)}
           >
-            <Text style={styles.clearFiltersText}>Limpar</Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      {activeFilterCount > 0 ? (
-        <View style={styles.activeFiltersRow}>
-          {statusFilter !== 'Todas' ? (
-            <View style={styles.activeFilterPill}>
-              <Text style={styles.activeFilterText}>{statusFilter}</Text>
-            </View>
-          ) : null}
-
-          {categoryFilter !== 'Todas' ? (
-            <View style={styles.activeFilterPill}>
-              <Text style={styles.activeFilterText}>{categoryFilter}</Text>
-            </View>
-          ) : null}
-
-          {dateFilter !== 'Todas' ? (
-            <View style={styles.activeFilterPill}>
-              <Text style={styles.activeFilterText}>
-                {dateFilter === 'Personalizado' && customStartDate && customEndDate
-                  ? `${customStartDate} - ${customEndDate}`
-                  : dateFilter}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
-      <View style={styles.metricsRow}>
-        <View style={[styles.metricCard, { backgroundColor: colors.primarySoft }]}>
-          <Text style={styles.metricLabel}>Total</Text>
-          <Text style={styles.metricValue}>{totalActivities}</Text>
-          <Text style={styles.metricCaption}>atividades</Text>
-        </View>
-
-        <View style={[styles.metricCard, { backgroundColor: colors.mint }]}>
-          <Text style={styles.metricLabel}>Hoje</Text>
-          <Text style={styles.metricValue}>{todayActivities}</Text>
-          <Text style={styles.metricCaption}>registros</Text>
-        </View>
-      </View>
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Atividades recentes</Text>
-        <Pressable onPress={() => navigation.navigate('Dashboard')}>
-          <Text style={styles.linkText}>Ver métricas</Text>
-        </Pressable>
-      </View>
-
-      <FlatList
-        data={filteredActivities}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
-
-      <Pressable
-        style={styles.fab}
-        onPress={() => navigation.navigate('CreateActivity')}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </Pressable>
-
-      <Modal
-        visible={isFilterModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsFilterModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.filtersHeader}>
-              <Text style={styles.modalTitle}>Filtrar atividades</Text>
-              {hasActiveFilters ? (
-                <Pressable
-                  onPress={() => {
-                    setSearch('');
-                    setStatusFilter('Todas');
-                    setCategoryFilter('Todas');
-                    setDateFilter('Todas');
-                    setCustomStartDate('');
-                    setCustomEndDate('');
-                  }}
-                >
-                  <Text style={styles.clearFiltersText}>Limpar</Text>
-                </Pressable>
-              ) : null}
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Refine a lista sem ocupar a tela principal.
+            <Text style={styles.filtersButtonText}>
+              {activeFilterCount > 0
+                ? `Filtros (${activeFilterCount})`
+                : 'Filtrar resultados'}
             </Text>
+          </Pressable>
 
-            <Text style={styles.filterLabel}>Status</Text>
-            <View style={styles.filterOptionsRow}>
-              {statusFilterOptions.map((option) => {
-                const selected = statusFilter === option;
+          {hasActiveFilters ? (
+            <Pressable onPress={resetFilters}>
+              <Text style={styles.clearFiltersText}>Limpar</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => setStatusFilter(option)}
-                    style={[
-                      styles.filterChip,
-                      selected && styles.filterChipSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        selected && styles.filterChipTextSelected,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Text style={styles.filterLabel}>Categoria</Text>
-            <View style={styles.filterOptionsRow}>
-              {categoryFilterOptions.map((option) => {
-                const selected = categoryFilter === option;
-
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => setCategoryFilter(option)}
-                    style={[
-                      styles.filterChip,
-                      selected && styles.filterChipSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        selected && styles.filterChipTextSelected,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Text style={styles.filterLabel}>Data</Text>
-            <View style={styles.filterOptionsRow}>
-              {dateFilterOptions.map((option) => {
-                const selected = dateFilter === option;
-
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => setDateFilter(option)}
-                    style={[
-                      styles.filterChip,
-                      selected && styles.filterChipSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        selected && styles.filterChipTextSelected,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {dateFilter === 'Personalizado' ? (
-              <View style={styles.customDateRow}>
-                <TextInput
-                  style={[styles.searchInput, styles.customDateInput]}
-                  placeholder="Início: dd/mm/aaaa"
-                  placeholderTextColor={colors.textSecondary}
-                  value={customStartDate}
-                  onChangeText={(value) =>
-                    setCustomStartDate(normalizeDateInput(value))
-                  }
-                  keyboardType="numeric"
-                />
-
-                <TextInput
-                  style={[styles.searchInput, styles.customDateInput]}
-                  placeholder="Fim: dd/mm/aaaa"
-                  placeholderTextColor={colors.textSecondary}
-                  value={customEndDate}
-                  onChangeText={(value) =>
-                    setCustomEndDate(normalizeDateInput(value))
-                  }
-                  keyboardType="numeric"
-                />
+        {activeFilterCount > 0 ? (
+          <View style={styles.activeFiltersRow}>
+            {statusFilter !== 'Todas' ? (
+              <View style={styles.activeFilterPill}>
+                <Text style={styles.activeFilterText}>{statusFilter}</Text>
               </View>
             ) : null}
 
-            <View style={styles.modalActions}>
-              <Pressable
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={() => setIsFilterModalVisible(false)}
-              >
-                <Text style={styles.modalCancelText}>Fechar</Text>
-              </Pressable>
-            </View>
+            {categoryFilter !== 'Todas' ? (
+              <View style={styles.activeFilterPill}>
+                <Text style={styles.activeFilterText}>{categoryFilter}</Text>
+              </View>
+            ) : null}
+
+            {dateFilter !== 'Todas' ? (
+              <View style={styles.activeFilterPill}>
+                <Text style={styles.activeFilterText}>
+                  {dateFilter === 'Personalizado' &&
+                  customStartDate &&
+                  customEndDate
+                    ? `${customStartDate} - ${customEndDate}`
+                    : dateFilter}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View style={styles.metricsRow}>
+          <View style={[styles.metricCard, { backgroundColor: colors.primarySoft }]}>
+            <Text style={styles.metricLabel}>Total</Text>
+            <Text style={styles.metricValue}>{totalActivities}</Text>
+            <Text style={styles.metricCaption}>atividades</Text>
+          </View>
+
+          <View style={[styles.metricCard, { backgroundColor: colors.mint }]}>
+            <Text style={styles.metricLabel}>Hoje</Text>
+            <Text style={styles.metricValue}>{todayActivities}</Text>
+            <Text style={styles.metricCaption}>registros</Text>
           </View>
         </View>
-      </Modal>
 
-      <Modal
-        visible={isStatusModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={closeStatusModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Alterar status</Text>
-            <Text style={styles.modalSubtitle}>
-              Selecione o novo status da atividade.
-            </Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Atividades recentes</Text>
+          <Pressable onPress={() => navigation.navigate('Dashboard')}>
+            <Text style={styles.linkText}>Ver métricas</Text>
+          </Pressable>
+        </View>
 
-            <View style={styles.modalOptions}>
-              {statusOptions.map((status) => {
-                const visual = statusStyles[status];
-                const isSelected = selectedStatus === status;
+        <FlatList
+          data={filteredActivities}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
 
-                return (
-                  <Pressable
-                    key={status}
-                    onPress={() => setSelectedStatus(status)}
-                    style={[
-                      styles.modalStatusOption,
-                      { backgroundColor: visual.backgroundColor },
-                      isSelected && styles.modalStatusOptionSelected,
-                    ]}
-                  >
-                    <Text
+        <Pressable
+          style={styles.fab}
+          onPress={() => navigation.navigate('CreateActivity')}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </Pressable>
+
+        <Modal
+          visible={isFilterModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setIsFilterModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.filtersHeader}>
+                <Text style={styles.modalTitle}>Filtrar atividades</Text>
+                {hasActiveFilters ? (
+                  <Pressable onPress={resetFilters}>
+                    <Text style={styles.clearFiltersText}>Limpar</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <Text style={styles.modalSubtitle}>
+                Refine a lista sem ocupar a tela principal.
+              </Text>
+
+              <Text style={styles.filterLabel}>Status</Text>
+              <View style={styles.filterOptionsRow}>
+                {statusFilterOptions.map((option) => {
+                  const selected = statusFilter === option;
+
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => setStatusFilter(option)}
                       style={[
-                        styles.modalStatusOptionText,
-                        { color: visual.textColor },
+                        styles.filterChip,
+                        selected && styles.filterChipSelected,
                       ]}
                     >
-                      {status}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          selected && styles.filterChipTextSelected,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-            {selectedStatus === 'Adiada' && (
-              <>
-                <Text style={styles.noteLabel}>Motivo do adiamento</Text>
-                <TextInput
-                  style={[styles.searchInput, styles.noteInput]}
-                  placeholder="Ex.: sem tempo hoje, retomar amanhã"
-                  placeholderTextColor={colors.textSecondary}
-                  value={postponeNote}
-                  onChangeText={setPostponeNote}
-                  multiline
-                />
+              <Text style={styles.filterLabel}>Categoria</Text>
+              <View style={styles.filterOptionsRow}>
+                {categoryFilterOptions.map((option) => {
+                  const selected = categoryFilter === option;
 
-                <Text style={styles.noteLabel}>Adiada para</Text>
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="dd/mm/aaaa"
-                  placeholderTextColor={colors.textSecondary}
-                  value={postponeUntil}
-                  onChangeText={(value) =>
-                    setPostponeUntil(normalizeDateInput(value))
-                  }
-                  keyboardType="numeric"
-                />
-              </>
-            )}
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => setCategoryFilter(option)}
+                      style={[
+                        styles.filterChip,
+                        selected && styles.filterChipSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          selected && styles.filterChipTextSelected,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-            <View style={styles.modalActions}>
-              <Pressable
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={closeStatusModal}
-              >
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </Pressable>
+              <Text style={styles.filterLabel}>Data</Text>
+              <View style={styles.filterOptionsRow}>
+                {dateFilterOptions.map((option) => {
+                  const selected = dateFilter === option;
 
-              <Pressable
-                style={[styles.modalButton, styles.modalConfirmButton]}
-                onPress={handleConfirmStatusUpdate}
-              >
-                <Text style={styles.modalConfirmText}>Confirmar</Text>
-              </Pressable>
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => setDateFilter(option)}
+                      style={[
+                        styles.filterChip,
+                        selected && styles.filterChipSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          selected && styles.filterChipTextSelected,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {dateFilter === 'Personalizado' ? (
+                <View style={styles.customDateRow}>
+                  <TextInput
+                    style={[styles.searchInput, styles.customDateInput]}
+                    placeholder="Início: dd/mm/aaaa"
+                    placeholderTextColor={colors.textSecondary}
+                    value={customStartDate}
+                    onChangeText={(value) =>
+                      setCustomStartDate(normalizeDateInput(value))
+                    }
+                    keyboardType="numeric"
+                  />
+
+                  <TextInput
+                    style={[styles.searchInput, styles.customDateInput]}
+                    placeholder="Fim: dd/mm/aaaa"
+                    placeholderTextColor={colors.textSecondary}
+                    value={customEndDate}
+                    onChangeText={(value) =>
+                      setCustomEndDate(normalizeDateInput(value))
+                    }
+                    keyboardType="numeric"
+                  />
+                </View>
+              ) : null}
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={[styles.modalButton, styles.modalCancelButton]}
+                  onPress={() => setIsFilterModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelText}>Fechar</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+
+        <Modal
+          visible={isStatusModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeStatusModal}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Alterar status</Text>
+              <Text style={styles.modalSubtitle}>
+                Selecione o novo status da atividade.
+              </Text>
+
+              <View style={styles.modalOptions}>
+                {statusOptions.map((status) => {
+                  const visual = statusStyles[status];
+                  const isSelected = selectedStatus === status;
+
+                  return (
+                    <Pressable
+                      key={status}
+                      onPress={() => setSelectedStatus(status)}
+                      style={[
+                        styles.modalStatusOption,
+                        { backgroundColor: visual.backgroundColor },
+                        isSelected && styles.modalStatusOptionSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.modalStatusOptionText,
+                          { color: visual.textColor },
+                        ]}
+                      >
+                        {status}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {selectedStatus === 'Adiada' ? (
+                <>
+                  <Text style={styles.noteLabel}>Motivo do adiamento</Text>
+                  <TextInput
+                    style={[styles.searchInput, styles.noteInput]}
+                    placeholder="Ex.: sem tempo hoje, retomar amanhã"
+                    placeholderTextColor={colors.textSecondary}
+                    value={postponeNote}
+                    onChangeText={setPostponeNote}
+                    multiline
+                  />
+
+                  <Text style={styles.noteLabel}>Adiada para</Text>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="dd/mm/aaaa"
+                    placeholderTextColor={colors.textSecondary}
+                    value={postponeUntil}
+                    onChangeText={(value) =>
+                      setPostponeUntil(normalizeDateInput(value))
+                    }
+                    keyboardType="numeric"
+                  />
+                </>
+              ) : null}
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={[styles.modalButton, styles.modalCancelButton]}
+                  onPress={closeStatusModal}
+                >
+                  <Text style={styles.modalCancelText}>Cancelar</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.modalButton, styles.modalConfirmButton]}
+                  onPress={() => void handleConfirmStatusUpdate()}
+                >
+                  <Text style={styles.modalConfirmText}>Confirmar</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xxl,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  appTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  logoBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    color: colors.primaryDark,
-    fontWeight: '700',
-    fontSize: 16,
   },
   searchInput: {
     backgroundColor: colors.surfaceSoft,
@@ -756,11 +806,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
-  },
-  filtersTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
   },
   clearFiltersText: {
     fontSize: 13,
@@ -864,7 +909,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listContent: {
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   activityCard: {
     backgroundColor: colors.surface,
@@ -879,8 +924,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
+  activityCardPressed: {
+    opacity: 0.86,
+  },
   completedCard: {
-    opacity: 0.92,
+    opacity: 0.94,
   },
   iconBadge: {
     width: 42,
@@ -921,57 +969,49 @@ const styles = StyleSheet.create({
     maxWidth: 86,
     textAlign: 'right',
   },
+  statusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
   statusBadge: {
     alignSelf: 'flex-start',
     borderRadius: radius.pill,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    marginBottom: spacing.sm,
   },
   statusBadgeText: {
     fontSize: 12,
     fontWeight: '700',
   },
+  reminderBadge: {
+    backgroundColor: '#FFF6D9',
+    borderRadius: radius.pill,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  reminderBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8D6C14',
+  },
   activityDescription: {
     fontSize: 12,
     color: colors.textSecondary,
     marginBottom: spacing.md,
+    lineHeight: 18,
   },
   postponeInfoBox: {
     backgroundColor: '#FDF3EC',
     borderRadius: radius.md,
     padding: spacing.sm,
-    marginBottom: spacing.md,
   },
   postponeInfoText: {
     fontSize: 12,
     color: '#8A5A3C',
     marginBottom: 2,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  actionButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-  },
-  editButton: {
-    backgroundColor: colors.primarySoft,
-  },
-  deleteButton: {
-    backgroundColor: '#FBE4E3',
-  },
-  editButtonText: {
-    color: colors.primaryDark,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  deleteButtonText: {
-    color: '#C94B46',
-    fontSize: 12,
-    fontWeight: '600',
   },
   fab: {
     position: 'absolute',

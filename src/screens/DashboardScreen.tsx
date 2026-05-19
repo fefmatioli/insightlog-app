@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -6,8 +6,11 @@ import {
   View,
   Pressable,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
@@ -19,6 +22,7 @@ import {
   toShortDisplayDate,
 } from '../utils/date';
 import ScreenHeader from '@/components/ScreenHeader';
+import { fetchLocalWeather, LocalWeather } from '@/services/weather';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 type PeriodFilter = 'Dia' | 'Semana' | 'Mês' | 'Personalizado';
@@ -94,6 +98,22 @@ function countCompletionStreak(dates: string[], reference: Date) {
   return streak;
 }
 
+function getWeatherErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return 'Não foi possível carregar o clima da sua região.';
+  }
+
+  if (error.message === 'LOCATION_PERMISSION_DENIED') {
+    return 'Permissão de localização negada. Ative a localização para ver o clima local.';
+  }
+
+  if (error.message === 'LOCATION_UNAVAILABLE') {
+    return 'Não foi possível obter sua localização no momento.';
+  }
+
+  return 'Não foi possível buscar os dados de clima agora.';
+}
+
 export default function DashboardScreen({ navigation }: Props) {
   const { activities } = useActivities();
   const now = new Date();
@@ -101,8 +121,13 @@ export default function DashboardScreen({ navigation }: Props) {
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('Mês');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [weather, setWeather] = useState<LocalWeather | null>(null);
+  const [isLoadingWeather, setIsLoadingWeather] = useState(true);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
 
   const filteredActivities = useMemo(() => {
+    const referenceDate = new Date();
+
     if (periodFilter === 'Personalizado') {
       const startISO = toISODate(customStartDate);
       const endISO = toISODate(customEndDate);
@@ -126,13 +151,13 @@ export default function DashboardScreen({ navigation }: Props) {
     return activities.filter((item) => {
       const date = new Date(item.createdAt);
 
-      if (periodFilter === 'Dia') return isSameDay(date, now);
-      if (periodFilter === 'Semana') return isWithinLast7Days(date, now);
-      if (periodFilter === 'Mês') return isSameMonth(date, now);
+      if (periodFilter === 'Dia') return isSameDay(date, referenceDate);
+      if (periodFilter === 'Semana') return isWithinLast7Days(date, referenceDate);
+      if (periodFilter === 'Mês') return isSameMonth(date, referenceDate);
 
       return true;
     });
-  }, [activities, periodFilter, customStartDate, customEndDate, now]);
+  }, [activities, periodFilter, customStartDate, customEndDate]);
 
   const total = filteredActivities.length;
   const completed = filteredActivities.filter(
@@ -235,7 +260,7 @@ export default function DashboardScreen({ navigation }: Props) {
       ? `+${weeklyDelta} vs semana anterior`
       : weeklyDelta < 0
         ? `${weeklyDelta} vs semana anterior`
-        : 'mesmo ritmo da semana anterior';
+        : 'Mesmo ritmo da semana anterior';
 
   const oldPending = activities.filter((item) => {
     if (item.status !== 'Pendente') return false;
@@ -273,256 +298,324 @@ export default function DashboardScreen({ navigation }: Props) {
 
   const maxDayCount = Math.max(...activitiesByDay.map((item) => item.count), 1);
 
+  async function loadWeather() {
+    try {
+      setIsLoadingWeather(true);
+      setWeatherError(null);
+      const data = await fetchLocalWeather();
+      setWeather(data);
+    } catch (error) {
+      setWeather(null);
+      setWeatherError(getWeatherErrorMessage(error));
+    } finally {
+      setIsLoadingWeather(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadWeather();
+  }, []);
+
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.header}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <ScreenHeader title="Métricas" onBack={() => navigation.goBack()} />
-      </View>
 
-      <Text style={styles.pageSubtitle}>
-        Acompanhe progresso, consistência e comportamento das suas atividades.
-      </Text>
+        <Text style={styles.pageSubtitle}>
+          Acompanhe progresso, consistência e comportamento das suas atividades.
+        </Text>
 
-      <View style={styles.filterRow}>
-        {(['Dia', 'Semana', 'Mês', 'Personalizado'] as PeriodFilter[]).map(
-          (filter) => {
-            const selected = periodFilter === filter;
-
-            return (
-              <Pressable
-                key={filter}
-                onPress={() => setPeriodFilter(filter)}
-                style={[
-                  styles.filterChip,
-                  selected && styles.filterChipSelected,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selected && styles.filterChipTextSelected,
-                  ]}
-                >
-                  {filter}
-                </Text>
-              </Pressable>
-            );
-          }
-        )}
-      </View>
-
-      {periodFilter === 'Personalizado' && (
-        <View style={styles.customFilterCard}>
-          <Text style={styles.customFilterTitle}>Intervalo personalizado</Text>
-
-          <TextInput
-            style={styles.customDateInput}
-            placeholder="Data inicial: dd/mm/aaaa"
-            placeholderTextColor={colors.textSecondary}
-            value={customStartDate}
-            onChangeText={(value) => setCustomStartDate(normalizeDateInput(value))}
-            keyboardType="numeric"
-          />
-
-          <TextInput
-            style={styles.customDateInput}
-            placeholder="Data final: dd/mm/aaaa"
-            placeholderTextColor={colors.textSecondary}
-            value={customEndDate}
-            onChangeText={(value) => setCustomEndDate(normalizeDateInput(value))}
-            keyboardType="numeric"
-          />
-        </View>
-      )}
-
-      <View style={styles.topCardsGrid}>
-        <MetricCard
-          title="Total"
-          value={String(total)}
-          subtitle="atividades"
-          backgroundColor={colors.primarySoft}
-        />
-        <MetricCard
-          title="Concluídas"
-          value={String(completed)}
-          subtitle={`${completionRate}% de conclusão`}
-          backgroundColor="#DDF3E7"
-        />
-        <MetricCard
-          title="Em andamento"
-          value={String(inProgress)}
-          subtitle="em progresso"
-          backgroundColor="#DCEBFF"
-        />
-        <MetricCard
-          title="Adiadas"
-          value={String(postponed)}
-          subtitle={`${postponementRate}% do total`}
-          backgroundColor="#FCE8DC"
-        />
-      </View>
-
-      <View style={styles.topCardsGrid}>
-        <MetricCard
-          title="Dias ativos"
-          value={String(activeDays)}
-          subtitle="dias com atividade"
-          backgroundColor="#E8F6F2"
-        />
-        <MetricCard
-          title="Categoria foco"
-          value={topCategory?.category ?? '-'}
-          subtitle={`${topCategory?.total ?? 0} atividades`}
-          backgroundColor="#F2ECFA"
-        />
-      </View>
-
-      <View style={styles.topCardsGrid}>
-        <MetricCard
-          title="Sequência"
-          value={String(completionStreak)}
-          subtitle={
-            completionStreak === 1 ? 'dia concluindo' : 'dias concluindo'
-          }
-          backgroundColor="#FFF1CC"
-        />
-        <MetricCard
-          title="Ritmo semanal"
-          value={String(completedThisWeek)}
-          subtitle={weeklyDeltaLabel}
-          backgroundColor="#EAF4FF"
-        />
-      </View>
-
-      <View style={styles.topCardsGrid}>
-        <MetricCard
-          title="Pendentes antigos"
-          value={String(oldPending)}
-          subtitle="há 7 dias ou mais"
-          backgroundColor="#FCE8E6"
-          fullWidth
-        />
-      </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Progresso Geral</Text>
-
-        <View style={styles.progressHeader}>
-          <Text style={styles.progressBig}>{completionRate}%</Text>
-          <Text style={styles.progressCaption}>
-            {completed} concluídas • {pending} pendentes
-          </Text>
-        </View>
-
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${completionRate}%` }]} />
-        </View>
-      </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Atividades por Dia</Text>
-        <Text style={styles.sectionHint}>Últimos dias dentro do filtro</Text>
-
-        <View style={styles.miniChartRow}>
-          {activitiesByDay.length > 0 ? (
-            activitiesByDay.map((item) => {
-              const height =
-                item.count > 0 ? (item.count / maxDayCount) * 110 : 8;
+        <View style={styles.filterRow}>
+          {(['Dia', 'Semana', 'Mês', 'Personalizado'] as PeriodFilter[]).map(
+            (filter) => {
+              const selected = periodFilter === filter;
 
               return (
-                <View key={item.date} style={styles.dayBarGroup}>
-                  <View style={styles.dayBarArea}>
-                    <View style={[styles.dayBar, { height }]} />
-                  </View>
-                  <Text style={styles.dayBarValue}>{item.count}</Text>
-                  <Text style={styles.dayBarLabel}>
-                    {toShortDisplayDate(
-                      new Date(item.date.split('/').reverse().join('-')).toISOString()
-                    )}
+                <Pressable
+                  key={filter}
+                  onPress={() => setPeriodFilter(filter)}
+                  style={[
+                    styles.filterChip,
+                    selected && styles.filterChipSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      selected && styles.filterChipTextSelected,
+                    ]}
+                  >
+                    {filter}
                   </Text>
-                </View>
+                </Pressable>
               );
-            })
-          ) : (
-            <Text style={styles.emptyChartText}>Sem dados no período.</Text>
+            }
           )}
         </View>
-      </View>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Progresso por Categoria</Text>
+        {periodFilter === 'Personalizado' ? (
+          <View style={styles.customFilterCard}>
+            <Text style={styles.customFilterTitle}>Intervalo personalizado</Text>
 
-        {categoryProgress.map((item) => (
-          <View key={item.category} style={styles.categoryBlock}>
-            <View style={styles.categoryHeader}>
-              <View style={styles.categoryTitleRow}>
-                <View
-                  style={[
-                    styles.categoryDot,
-                    { backgroundColor: categoryColors[item.category] },
-                  ]}
-                />
-                <Text style={styles.categoryTitle}>{item.category}</Text>
-              </View>
+            <TextInput
+              style={styles.customDateInput}
+              placeholder="Data inicial: dd/mm/aaaa"
+              placeholderTextColor={colors.textSecondary}
+              value={customStartDate}
+              onChangeText={(value) => setCustomStartDate(normalizeDateInput(value))}
+              keyboardType="numeric"
+            />
 
-              <Text style={styles.categoryNumbers}>
-                {item.completed}/{item.total}
+            <TextInput
+              style={styles.customDateInput}
+              placeholder="Data final: dd/mm/aaaa"
+              placeholderTextColor={colors.textSecondary}
+              value={customEndDate}
+              onChangeText={(value) => setCustomEndDate(normalizeDateInput(value))}
+              keyboardType="numeric"
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.sectionCard}>
+          <View style={styles.weatherHeader}>
+            <Text style={styles.sectionTitle}>Clima da sua região</Text>
+            <Pressable onPress={() => void loadWeather()}>
+              <Text style={styles.linkText}>Atualizar</Text>
+            </Pressable>
+          </View>
+
+          {isLoadingWeather ? (
+            <View style={styles.weatherLoadingRow}>
+              <ActivityIndicator color={colors.primaryDark} />
+              <Text style={styles.weatherHelperText}>Buscando clima local...</Text>
+            </View>
+          ) : weatherError ? (
+            <View style={styles.weatherErrorBox}>
+              <Text style={styles.weatherErrorText}>{weatherError}</Text>
+              <Text style={styles.weatherHelperText}>
+                A dashboard continua funcionando normalmente mesmo sem esse dado.
               </Text>
             </View>
-
-            <View style={styles.progressTrackSmall}>
-              <View
-                style={[
-                  styles.progressFillSmall,
-                  {
-                    width: `${item.progress}%`,
-                    backgroundColor: categoryColors[item.category],
-                  },
-                ]}
-              />
-            </View>
-
-            <Text style={styles.categoryProgressText}>
-              {item.progress}% de conclusão
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Distribuição por Status</Text>
-
-        <View style={styles.statusChartRow}>
-          {statusCounts.map((item) => {
-            const barHeight =
-              item.count > 0 ? (item.count / maxStatusCount) * 110 : 8;
-
-            return (
-              <View key={item.status} style={styles.barGroup}>
-                <View style={styles.barArea}>
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: barHeight,
-                        backgroundColor: statusColors[item.status],
-                      },
-                    ]}
-                  />
+          ) : weather ? (
+            <View>
+              <View style={styles.weatherSummaryRow}>
+                <View style={styles.weatherTempBlock}>
+                  <Text style={styles.weatherTemp}>
+                    {Math.round(weather.temperature)}°C
+                  </Text>
+                  <Text style={styles.weatherCondition}>
+                    {weather.weatherLabel}
+                  </Text>
                 </View>
 
-                <Text style={styles.barValue}>{item.count}</Text>
-                <Text style={styles.barLabel}>{item.status}</Text>
+                <View style={styles.weatherLocationBlock}>
+                  <Text style={styles.weatherLocationLabel}>
+                    {weather.locationLabel}
+                  </Text>
+                  <Text style={styles.weatherHelperText}>
+                    Atualizado com localização do dispositivo
+                  </Text>
+                </View>
               </View>
-            );
-          })}
+
+              <View style={styles.weatherInsightBox}>
+                <Text style={styles.weatherInsightTitle}>Sugestão</Text>
+                <Text style={styles.weatherInsightText}>{weather.message}</Text>
+              </View>
+            </View>
+          ) : null}
         </View>
-      </View>
-    </ScrollView>
+
+        <View style={styles.topCardsGrid}>
+          <MetricCard
+            title="Total"
+            value={String(total)}
+            subtitle="atividades"
+            backgroundColor={colors.primarySoft}
+          />
+          <MetricCard
+            title="Concluídas"
+            value={String(completed)}
+            subtitle={`${completionRate}% de conclusão`}
+            backgroundColor="#DDF3E7"
+          />
+          <MetricCard
+            title="Em andamento"
+            value={String(inProgress)}
+            subtitle="em progresso"
+            backgroundColor="#DCEBFF"
+          />
+          <MetricCard
+            title="Adiadas"
+            value={String(postponed)}
+            subtitle={`${postponementRate}% do total`}
+            backgroundColor="#FCE8DC"
+          />
+        </View>
+
+        <View style={styles.topCardsGrid}>
+          <MetricCard
+            title="Dias ativos"
+            value={String(activeDays)}
+            subtitle="dias com atividade"
+            backgroundColor="#E8F6F2"
+          />
+          <MetricCard
+            title="Categoria foco"
+            value={topCategory?.category ?? '-'}
+            subtitle={`${topCategory?.total ?? 0} atividades`}
+            backgroundColor="#F2ECFA"
+          />
+        </View>
+
+        <View style={styles.topCardsGrid}>
+          <MetricCard
+            title="Sequência"
+            value={String(completionStreak)}
+            subtitle={
+              completionStreak === 1 ? 'dia concluindo' : 'dias concluindo'
+            }
+            backgroundColor="#FFF1CC"
+          />
+          <MetricCard
+            title="Ritmo semanal"
+            value={String(completedThisWeek)}
+            subtitle={weeklyDeltaLabel}
+            backgroundColor="#EAF4FF"
+          />
+        </View>
+
+        <View style={styles.topCardsGrid}>
+          <MetricCard
+            title="Pendentes antigos"
+            value={String(oldPending)}
+            subtitle="há 7 dias ou mais"
+            backgroundColor="#FCE8E6"
+            fullWidth
+          />
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Progresso Geral</Text>
+
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressBig}>{completionRate}%</Text>
+            <Text style={styles.progressCaption}>
+              {completed} concluídas • {pending} pendentes
+            </Text>
+          </View>
+
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${completionRate}%` }]} />
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Atividades por Dia</Text>
+          <Text style={styles.sectionHint}>Últimos dias dentro do filtro</Text>
+
+          <View style={styles.miniChartRow}>
+            {activitiesByDay.length > 0 ? (
+              activitiesByDay.map((item) => {
+                const height =
+                  item.count > 0 ? (item.count / maxDayCount) * 110 : 8;
+
+                return (
+                  <View key={item.date} style={styles.dayBarGroup}>
+                    <View style={styles.dayBarArea}>
+                      <View style={[styles.dayBar, { height }]} />
+                    </View>
+                    <Text style={styles.dayBarValue}>{item.count}</Text>
+                    <Text style={styles.dayBarLabel}>
+                      {toShortDisplayDate(
+                        new Date(item.date.split('/').reverse().join('-')).toISOString()
+                      )}
+                    </Text>
+                  </View>
+                );
+              })
+            ) : (
+              <Text style={styles.emptyChartText}>Sem dados no período.</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Progresso por Categoria</Text>
+
+          {categoryProgress.map((item) => (
+            <View key={item.category} style={styles.categoryBlock}>
+              <View style={styles.categoryHeader}>
+                <View style={styles.categoryTitleRow}>
+                  <View
+                    style={[
+                      styles.categoryDot,
+                      { backgroundColor: categoryColors[item.category] },
+                    ]}
+                  />
+                  <Text style={styles.categoryTitle}>{item.category}</Text>
+                </View>
+
+                <Text style={styles.categoryNumbers}>
+                  {item.completed}/{item.total}
+                </Text>
+              </View>
+
+              <View style={styles.progressTrackSmall}>
+                <View
+                  style={[
+                    styles.progressFillSmall,
+                    {
+                      width: `${item.progress}%`,
+                      backgroundColor: categoryColors[item.category],
+                    },
+                  ]}
+                />
+              </View>
+
+              <Text style={styles.categoryProgressText}>
+                {item.progress}% de conclusão
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Distribuição por Status</Text>
+
+          <View style={styles.statusChartRow}>
+            {statusCounts.map((item) => {
+              const barHeight =
+                item.count > 0 ? (item.count / maxStatusCount) * 110 : 8;
+
+              return (
+                <View key={item.status} style={styles.barGroup}>
+                  <View style={styles.barArea}>
+                    <View
+                      style={[
+                        styles.bar,
+                        {
+                          height: barHeight,
+                          backgroundColor: statusColors[item.status],
+                        },
+                      ]}
+                    />
+                  </View>
+
+                  <Text style={styles.barValue}>{item.count}</Text>
+                  <Text style={styles.barLabel}>{item.status}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -557,6 +650,10 @@ function MetricCard({
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -564,13 +661,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     paddingBottom: spacing.xxl,
-  },
-  header: {
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   pageSubtitle: {
     fontSize: 14,
@@ -630,6 +720,88 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  weatherHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  weatherLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  weatherSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  weatherTempBlock: {
+    minWidth: 96,
+  },
+  weatherTemp: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: colors.text,
+    lineHeight: 40,
+  },
+  weatherCondition: {
+    marginTop: spacing.xs,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  weatherLocationBlock: {
+    flex: 1,
+  },
+  weatherLocationLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  weatherInsightBox: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSoft,
+  },
+  weatherInsightTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primaryDark,
+    marginBottom: spacing.xs,
+    textTransform: 'uppercase',
+  },
+  weatherInsightText: {
+    fontSize: 13,
+    color: colors.text,
+    lineHeight: 19,
+  },
+  weatherErrorBox: {
+    gap: spacing.xs,
+  },
+  weatherErrorText: {
+    fontSize: 13,
+    color: '#A35E35',
+    lineHeight: 19,
+  },
+  weatherHelperText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
   topCardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -659,17 +831,6 @@ const styles = StyleSheet.create({
   metricSubtitle: {
     fontSize: 12,
     color: colors.textSecondary,
-  },
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
   },
   sectionTitle: {
     fontSize: 18,
@@ -813,5 +974,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  linkText: {
+    color: colors.primaryDark,
+    fontWeight: '600',
   },
 });

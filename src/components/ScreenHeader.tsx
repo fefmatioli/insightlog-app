@@ -1,4 +1,5 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+
 import { appAssets } from '@/assets';
 import { colors } from '../theme/colors';
 import { spacing } from '../theme/layout';
@@ -30,7 +31,6 @@ export default function ScreenHeader({ title, onBack }: ScreenHeaderProps) {
 const styles = StyleSheet.create({
   header: {
     width: '100%',
-    marginTop: spacing.md,
     marginBottom: spacing.lg,
     flexDirection: 'row',
     justifyContent: 'space-between',

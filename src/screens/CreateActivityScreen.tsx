@@ -7,8 +7,11 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
@@ -17,12 +20,26 @@ import {
   ActivityStatus,
 } from '../data/mockActivities';
 import { useActivities } from '../context/ActivitiesContext';
-import { normalizeDateInput, toDisplayDate, toISODate } from '../utils/date';
+import {
+  isValidTime,
+  normalizeDateInput,
+  normalizeTimeInput,
+  toDisplayDate,
+  toISODate,
+} from '../utils/date';
 import ScreenHeader from '@/components/ScreenHeader';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateActivity'>;
 type Category = ActivityCategory;
 type Status = ActivityStatus;
+
+const reminderOffsetOptions = [
+  { label: 'No horario', value: 0 },
+  { label: '15 min antes', value: 15 },
+  { label: '30 min antes', value: 30 },
+  { label: '1h antes', value: 60 },
+  { label: '2h antes', value: 120 },
+] as const;
 
 export default function CreateActivityScreen({
   navigation,
@@ -44,6 +61,11 @@ export default function CreateActivityScreen({
   const [category, setCategory] = useState<Category>('Estudo');
   const [status, setStatus] = useState<Status>('Pendente');
   const [dateTime, setDateTime] = useState('');
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [activityTime, setActivityTime] = useState('');
+  const [reminderOffsetMinutes, setReminderOffsetMinutes] = useState<
+    number | undefined
+  >(undefined);
 
   useEffect(() => {
     if (activityToEdit) {
@@ -52,16 +74,22 @@ export default function CreateActivityScreen({
       setCategory(activityToEdit.category);
       setStatus(activityToEdit.status);
       setDateTime(toDisplayDate(activityToEdit.createdAt));
+      setReminderEnabled(activityToEdit.reminderEnabled);
+      setActivityTime(activityToEdit.activityTime || '');
+      setReminderOffsetMinutes(activityToEdit.reminderOffsetMinutes);
     } else {
       setTitle('');
       setDescription('');
       setCategory('Estudo');
       setStatus('Pendente');
       setDateTime(toDisplayDate(new Date().toISOString()));
+      setReminderEnabled(false);
+      setActivityTime('');
+      setReminderOffsetMinutes(undefined);
     }
   }, [activityToEdit]);
 
-  function handleSave() {
+  async function handleSave() {
     if (!title.trim()) {
       Alert.alert('Campo obrigatório', 'Preencha o título da atividade.');
       return;
@@ -70,7 +98,12 @@ export default function CreateActivityScreen({
     const parsedDate = toISODate(dateTime);
 
     if (!parsedDate) {
-      Alert.alert('Data inválida', 'Informe a data no formato dd/mm/aaaa');
+      Alert.alert('Data inválida', 'Informe a data no formato dd/mm/aaaa.');
+      return;
+    }
+
+    if (activityTime && !isValidTime(activityTime)) {
+      Alert.alert('Horario invalido', 'Informe o horario no formato HH:mm.');
       return;
     }
 
@@ -80,152 +113,222 @@ export default function CreateActivityScreen({
       category,
       status,
       createdAt: parsedDate,
+      activityTime: activityTime || undefined,
+      reminderEnabled,
+      reminderOffsetMinutes,
     };
 
     if (isEditing && activityToEdit) {
-      updateActivity(activityToEdit.id, payload);
+      await updateActivity(activityToEdit.id, payload);
     } else {
-      addActivity(payload);
+      await addActivity(payload);
     }
 
     navigation.goBack();
   }
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.header}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <ScreenHeader
-          title="Nova Atividade"
+          title={isEditing ? 'Editar Atividade' : 'Nova Atividade'}
           onBack={() => navigation.goBack()}
         />
-      </View>
 
-      <Text style={styles.pageSubtitle}>
-        {isEditing
-          ? 'Atualize os dados da atividade selecionada.'
-          : 'Registre uma nova atividade para acompanhar seus dados.'}
-      </Text>
+        <Text style={styles.pageSubtitle}>
+          {isEditing
+            ? 'Atualize os dados da atividade selecionada.'
+            : 'Registre uma nova atividade para acompanhar seus dados.'}
+        </Text>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Título</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Ex.: Leitura de React Native"
-          placeholderTextColor={colors.textSecondary}
-          value={title}
-          onChangeText={setTitle}
-        />
-
-        <Text style={styles.label}>Categoria</Text>
-        <View style={styles.rowWrap}>
-          <SelectChip
-            label="Estudo"
-            selected={category === 'Estudo'}
-            onPress={() => setCategory('Estudo')}
-            backgroundColor={colors.lavender}
+        <View style={styles.card}>
+          <Text style={styles.label}>Título</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Ex.: Leitura de React Native"
+            placeholderTextColor={colors.textSecondary}
+            value={title}
+            onChangeText={setTitle}
           />
-          <SelectChip
-            label="Saúde"
-            selected={category === 'Saúde'}
-            onPress={() => setCategory('Saúde')}
-            backgroundColor={colors.mint}
+
+          <Text style={styles.label}>Categoria</Text>
+          <View style={styles.rowWrap}>
+            <SelectChip
+              label="Estudo"
+              selected={category === 'Estudo'}
+              onPress={() => setCategory('Estudo')}
+              backgroundColor={colors.lavender}
+            />
+            <SelectChip
+              label="Saúde"
+              selected={category === 'Saúde'}
+              onPress={() => setCategory('Saúde')}
+              backgroundColor={colors.mint}
+            />
+            <SelectChip
+              label="Social"
+              selected={category === 'Social'}
+              onPress={() => setCategory('Social')}
+              backgroundColor={colors.rose}
+            />
+          </View>
+
+          <Text style={styles.label}>Status</Text>
+          <View style={styles.rowWrap}>
+            <SelectChip
+              label="Pendente"
+              selected={status === 'Pendente'}
+              onPress={() => setStatus('Pendente')}
+              backgroundColor="#F3EDF7"
+            />
+            <SelectChip
+              label="Em andamento"
+              selected={status === 'Em andamento'}
+              onPress={() => setStatus('Em andamento')}
+              backgroundColor="#E6F0FF"
+            />
+            <SelectChip
+              label="Concluída"
+              selected={status === 'Concluída'}
+              onPress={() => setStatus('Concluída')}
+              backgroundColor="#E2F4EA"
+            />
+            <SelectChip
+              label="Adiada"
+              selected={status === 'Adiada'}
+              onPress={() => setStatus('Adiada')}
+              backgroundColor="#FCEBDE"
+            />
+          </View>
+
+          <Text style={styles.label}>Descrição</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Adicione uma descrição opcional..."
+            placeholderTextColor={colors.textSecondary}
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            textAlignVertical="top"
           />
-          <SelectChip
-            label="Social"
-            selected={category === 'Social'}
-            onPress={() => setCategory('Social')}
-            backgroundColor={colors.rose}
+
+          <Text style={styles.label}>Data</Text>
+          <TextInput
+            style={styles.input}
+            value={dateTime}
+            onChangeText={(value) => setDateTime(normalizeDateInput(value))}
+            placeholder="dd/mm/aaaa"
+            placeholderTextColor={colors.textSecondary}
+            keyboardType="numeric"
           />
-        </View>
 
-        <Text style={styles.label}>Status</Text>
-        <View style={styles.rowWrap}>
-          <SelectChip
-            label="Pendente"
-            selected={status === 'Pendente'}
-            onPress={() => setStatus('Pendente')}
-            backgroundColor="#F3EDF7"
-          />
-          <SelectChip
-            label="Em andamento"
-            selected={status === 'Em andamento'}
-            onPress={() => setStatus('Em andamento')}
-            backgroundColor="#E6F0FF"
-          />
-          <SelectChip
-            label="Concluída"
-            selected={status === 'Concluída'}
-            onPress={() => setStatus('Concluída')}
-            backgroundColor="#E2F4EA"
-          />
-          <SelectChip
-            label="Adiada"
-            selected={status === 'Adiada'}
-            onPress={() => setStatus('Adiada')}
-            backgroundColor="#FCEBDE"
-          />
-        </View>
-
-        <Text style={styles.label}>Descrição</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Adicione uma descrição opcional..."
-          placeholderTextColor={colors.textSecondary}
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          textAlignVertical="top"
-        />
-
-        <Text style={styles.label}>Data</Text>
-        <TextInput
-          style={styles.input}
-          value={dateTime}
-          onChangeText={(value) => setDateTime(normalizeDateInput(value))}
-          placeholder="dd/mm/aaaa"
-          placeholderTextColor={colors.textSecondary}
-          keyboardType="numeric"
-        />
-
-        <Pressable style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>
-            {isEditing ? 'Salvar Alterações' : 'Salvar Atividade'}
-          </Text>
-        </Pressable>
-
-        {isEditing && activityToEdit?.history?.length ? (
-          <>
-            <Text style={styles.label}>Histórico</Text>
-            <View style={styles.historyBox}>
-              {activityToEdit.history.map((entry) => (
-                <View key={entry.id} style={styles.historyItem}>
-                  <Text style={styles.historyStatus}>{entry.status}</Text>
-                  <Text style={styles.historyDate}>
-                    {toDisplayDate(entry.changedAt)}
-                  </Text>
-
-                  {!!entry.note && (
-                    <Text style={styles.historyNote}>
-                      Motivo: {entry.note}
-                    </Text>
-                  )}
-
-                  {!!entry.postponedUntil && (
-                    <Text style={styles.historyNote}>
-                      Adiada para: {toDisplayDate(entry.postponedUntil)}
-                    </Text>
-                  )}
-                </View>
-              ))}
+          <Text style={styles.label}>Lembrete</Text>
+          <View style={styles.reminderRow}>
+          <View style={styles.reminderTextBlock}>
+              <Text style={styles.reminderTitle}>
+                Receber lembrete desta atividade
+              </Text>
+              <Text style={styles.reminderCaption}>
+                Defina um horario da atividade e, se quiser, quanto tempo antes
+                a notificacao deve chegar.
+              </Text>
             </View>
-          </>
-        ) : null}
-      </View>
-    </ScrollView>
+
+            <Switch
+              value={reminderEnabled}
+              onValueChange={setReminderEnabled}
+              trackColor={{
+                false: colors.border,
+                true: colors.primarySoft,
+              }}
+              thumbColor={
+                reminderEnabled ? colors.primaryDark : colors.surface
+              }
+            />
+          </View>
+
+          {reminderEnabled ? (
+            <>
+              <Text style={styles.label}>Horario da atividade</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Opcional - HH:mm"
+                placeholderTextColor={colors.textSecondary}
+                value={activityTime}
+                onChangeText={(value) => setActivityTime(normalizeTimeInput(value))}
+                keyboardType="numeric"
+              />
+
+              <Text style={styles.helperText}>
+                Se nenhum horario for informado, o lembrete usa o padrao das
+                09:00 no dia da atividade.
+              </Text>
+
+              <Text style={styles.label}>Notificar</Text>
+              <View style={styles.rowWrap}>
+                {reminderOffsetOptions.map((option) => (
+                  <SelectChip
+                    key={option.label}
+                    label={option.label}
+                    selected={reminderOffsetMinutes === option.value}
+                    onPress={() => setReminderOffsetMinutes(option.value)}
+                    backgroundColor="#F3EDF7"
+                  />
+                ))}
+                <SelectChip
+                  label="Sem ajuste"
+                  selected={reminderOffsetMinutes === undefined}
+                  onPress={() => setReminderOffsetMinutes(undefined)}
+                  backgroundColor={colors.surfaceSoft}
+                />
+              </View>
+
+              <Text style={styles.helperText}>
+                O aviso antes so vale quando houver horario informado.
+              </Text>
+            </>
+          ) : null}
+
+          <Pressable style={styles.saveButton} onPress={() => void handleSave()}>
+            <Text style={styles.saveButtonText}>
+              {isEditing ? 'Salvar Alterações' : 'Salvar Atividade'}
+            </Text>
+          </Pressable>
+
+          {isEditing && activityToEdit?.history?.length ? (
+            <>
+              <Text style={styles.label}>Histórico</Text>
+              <View style={styles.historyBox}>
+                {activityToEdit.history.map((entry) => (
+                  <View key={entry.id} style={styles.historyItem}>
+                    <Text style={styles.historyStatus}>{entry.status}</Text>
+                    <Text style={styles.historyDate}>
+                      {toDisplayDate(entry.changedAt)}
+                    </Text>
+
+                    {!!entry.note && (
+                      <Text style={styles.historyNote}>
+                        Motivo: {entry.note}
+                      </Text>
+                    )}
+
+                    {!!entry.postponedUntil && (
+                      <Text style={styles.historyNote}>
+                        Adiada para: {toDisplayDate(entry.postponedUntil)}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : null}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -257,6 +360,10 @@ function SelectChip({
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -264,23 +371,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     paddingBottom: spacing.xxl,
-  },
-  header: {
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  backText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primaryDark,
   },
   pageSubtitle: {
     fontSize: 14,
@@ -335,6 +425,36 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '600',
     fontSize: 13,
+  },
+  reminderRow: {
+    marginTop: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSoft,
+  },
+  reminderTextBlock: {
+    flex: 1,
+  },
+  reminderTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  reminderCaption: {
+    marginTop: spacing.xs,
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  helperText: {
+    marginTop: spacing.sm,
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
   saveButton: {
     backgroundColor: colors.primary,
