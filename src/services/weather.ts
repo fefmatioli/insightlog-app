@@ -1,3 +1,4 @@
+import axios from 'axios';
 import * as Location from 'expo-location';
 
 export type LocalWeather = {
@@ -5,6 +6,13 @@ export type LocalWeather = {
   temperature: number;
   weatherLabel: string;
   message: string;
+};
+
+type WeatherApiResponse = {
+  current: {
+    temperature_2m: number;
+    weather_code: number;
+  } | null;
 };
 
 function getWeatherLabel(weatherCode: number) {
@@ -74,26 +82,27 @@ export async function fetchLocalWeather() {
     longitude,
   });
 
-  const response = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`
+  const { data: payload } = await axios.get<WeatherApiResponse>(
+    'https://api.open-meteo.com/v1/forecast',
+    {
+      params: {
+        latitude,
+        longitude,
+        current: 'temperature_2m,weather_code',
+        timezone: 'auto',
+      },
+    }
   );
 
-  if (!response.ok) {
-    throw new Error('WEATHER_REQUEST_FAILED');
-  }
-
-  const payload = await response.json();
-  const currentWeather = payload.current;
-
-  if (!currentWeather) {
+  if (!payload.current) {
     throw new Error('WEATHER_DATA_UNAVAILABLE');
   }
 
-  const weatherCode = Number(currentWeather.weather_code ?? -1);
+  const weatherCode = Number(payload.current.weather_code ?? -1);
 
   return {
     locationLabel: buildLocationLabel(addresses[0] ?? null),
-    temperature: Number(currentWeather.temperature_2m ?? 0),
+    temperature: Number(payload.current.temperature_2m ?? 0),
     weatherLabel: getWeatherLabel(weatherCode),
     message: getWeatherMessage(weatherCode),
   } satisfies LocalWeather;

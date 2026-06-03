@@ -5,9 +5,7 @@ import { ActivityStatus } from '@/data/mockActivities';
 
 const CHANNEL_ID = 'activity-reminders';
 const COMPLETED_STATUS: ActivityStatus = 'Concluída';
-const isExpoGo =
-  Constants.appOwnership === 'expo' ||
-  Constants.executionEnvironment === 'storeClient';
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
 type NotificationsModule = typeof import('expo-notifications');
 
