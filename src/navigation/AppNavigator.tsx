@@ -2,6 +2,7 @@ import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../context/AuthContext';
@@ -54,6 +55,8 @@ function ActivitiesNavigator() {
 }
 
 function MainNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <MainTab.Navigator
       screenOptions={({ route }) => ({
@@ -63,8 +66,10 @@ function MainNavigator() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 62,
-          paddingBottom: 8,
+          // Cresce com a área segura para não invadir a barra de gestos
+          // em celulares sem botão físico (e fica compacta em quem tem botão).
+          height: 58 + insets.bottom,
+          paddingBottom: insets.bottom + 6,
           paddingTop: 6,
         },
         tabBarLabelStyle: {
