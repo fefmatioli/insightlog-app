@@ -6,7 +6,7 @@ import { spacing } from '../theme/layout';
 
 type ScreenHeaderProps = {
   title: string;
-  onBack: () => void;
+  onBack?: () => void;
 };
 
 export default function ScreenHeader({ title, onBack }: ScreenHeaderProps) {
@@ -14,9 +14,11 @@ export default function ScreenHeader({ title, onBack }: ScreenHeaderProps) {
     <View style={styles.header}>
       <View style={styles.titleBlock}>
         <Text style={styles.title}>{title}</Text>
-        <Pressable onPress={onBack} hitSlop={8}>
-          <Text style={styles.backText}>Voltar</Text>
-        </Pressable>
+        {!!onBack && (
+          <Pressable onPress={onBack} hitSlop={8}>
+            <Text style={styles.backText}>Voltar</Text>
+          </Pressable>
+        )}
       </View>
 
       <Image

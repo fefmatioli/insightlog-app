@@ -56,6 +56,7 @@ function normalizeActivities(data: unknown): Activity[] {
           : undefined,
       notificationId:
         typeof item.notificationId === 'string' ? item.notificationId : undefined,
+      photoUri: typeof item.photoUri === 'string' ? item.photoUri : undefined,
       history: Array.isArray(item.history) ? item.history : [],
     }));
 }

@@ -28,6 +28,7 @@ import {
   toISODate,
 } from '../utils/date';
 import ScreenHeader from '@/components/ScreenHeader';
+import ImagePickerField from '@/components/ImagePickerField';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateActivity'>;
 type Category = ActivityCategory;
@@ -66,6 +67,7 @@ export default function CreateActivityScreen({
   const [reminderOffsetMinutes, setReminderOffsetMinutes] = useState<
     number | undefined
   >(undefined);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
 
   useEffect(() => {
     if (activityToEdit) {
@@ -77,6 +79,7 @@ export default function CreateActivityScreen({
       setReminderEnabled(activityToEdit.reminderEnabled);
       setActivityTime(activityToEdit.activityTime || '');
       setReminderOffsetMinutes(activityToEdit.reminderOffsetMinutes);
+      setPhotoUri(activityToEdit.photoUri ?? null);
     } else {
       setTitle('');
       setDescription('');
@@ -86,6 +89,7 @@ export default function CreateActivityScreen({
       setReminderEnabled(false);
       setActivityTime('');
       setReminderOffsetMinutes(undefined);
+      setPhotoUri(null);
     }
   }, [activityToEdit]);
 
@@ -116,6 +120,7 @@ export default function CreateActivityScreen({
       activityTime: activityTime || undefined,
       reminderEnabled,
       reminderOffsetMinutes,
+      photoUri: photoUri ?? undefined,
     };
 
     if (isEditing && activityToEdit) {
@@ -215,6 +220,12 @@ export default function CreateActivityScreen({
             multiline
             textAlignVertical="top"
           />
+
+          <Text style={styles.label}>Foto</Text>
+          <ImagePickerField uri={photoUri} onChange={setPhotoUri} />
+          <Text style={styles.helperText}>
+            Opcional: registre uma foto da atividade pela câmera ou galeria.
+          </Text>
 
           <Text style={styles.label}>Data</Text>
           <TextInput

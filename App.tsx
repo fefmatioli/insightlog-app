@@ -3,6 +3,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AppNavigator from './src/navigation/AppNavigator';
 import { ActivitiesProvider } from './src/context/ActivitiesContext';
+import { AuthProvider } from './src/context/AuthContext';
 import { configureNotificationsAsync } from './src/services/notifications';
 
 export default function App() {
@@ -12,9 +13,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ActivitiesProvider>
-        <AppNavigator />
-      </ActivitiesProvider>
+      <AuthProvider>
+        <ActivitiesProvider>
+          <AppNavigator />
+        </ActivitiesProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

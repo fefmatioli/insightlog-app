@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -19,7 +20,6 @@ import { radius, spacing } from '../theme/layout';
 import { useActivities } from '../context/ActivitiesContext';
 import { isToday, normalizeDateInput, toDisplayDate, toISODate } from '../utils/date';
 import AppBrand from '../components/AppBrand';
-
 type Props = NativeStackScreenProps<RootStackParamList, 'Activities'>;
 type StatusFilter = ActivityStatus | 'Todas';
 type CategoryFilter = ActivityCategory | 'Todas';
@@ -357,12 +357,16 @@ export default function ActivitiesScreen({ navigation }: Props) {
           pressed && styles.activityCardPressed,
         ]}
       >
-        <View
-          style={[
-            styles.iconBadge,
-            { backgroundColor: categoryColors[item.category] },
-          ]}
-        />
+        {item.photoUri ? (
+          <Image source={{ uri: item.photoUri }} style={styles.iconBadge} />
+        ) : (
+          <View
+            style={[
+              styles.iconBadge,
+              { backgroundColor: categoryColors[item.category] },
+            ]}
+          />
+        )}
 
         <View style={styles.activityContent}>
           <View style={styles.topRow}>
@@ -511,9 +515,6 @@ export default function ActivitiesScreen({ navigation }: Props) {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Atividades recentes</Text>
-          <Pressable onPress={() => navigation.navigate('Dashboard')}>
-            <Text style={styles.linkText}>Ver métricas</Text>
-          </Pressable>
         </View>
 
         <FlatList

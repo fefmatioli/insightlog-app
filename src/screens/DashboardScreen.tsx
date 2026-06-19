@@ -9,9 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { RootStackParamList } from '../navigation/AppNavigator';
 import { colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
 import { useActivities } from '../context/ActivitiesContext';
@@ -24,7 +22,6 @@ import {
 import ScreenHeader from '@/components/ScreenHeader';
 import { fetchLocalWeather, LocalWeather } from '@/services/weather';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 type PeriodFilter = 'Dia' | 'Semana' | 'Mês' | 'Personalizado';
 
 const statusColors: Record<ActivityStatus, string> = {
@@ -114,7 +111,7 @@ function getWeatherErrorMessage(error: unknown) {
   return 'Não foi possível buscar os dados de clima agora.';
 }
 
-export default function DashboardScreen({ navigation }: Props) {
+export default function DashboardScreen() {
   const { activities } = useActivities();
   const now = new Date();
 
@@ -323,7 +320,7 @@ export default function DashboardScreen({ navigation }: Props) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <ScreenHeader title="Métricas" onBack={() => navigation.goBack()} />
+        <ScreenHeader title="Métricas" />
 
         <Text style={styles.pageSubtitle}>
           Acompanhe progresso, consistência e comportamento das suas atividades.

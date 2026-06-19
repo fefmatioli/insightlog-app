@@ -21,6 +21,7 @@ import {
   loadStoredActivities,
   saveStoredActivities,
 } from '@/services/activityStorage';
+import { deleteStoredImage } from '@/services/imagePicker';
 
 const COMPLETED_STATUS: ActivityStatus = 'Concluída';
 
@@ -33,6 +34,7 @@ type NewActivityInput = {
   status: ActivityStatus;
   reminderEnabled: boolean;
   reminderOffsetMinutes?: number;
+  photoUri?: string;
 };
 
 type ActivitiesContextValue = {
@@ -108,6 +110,7 @@ export function ActivitiesProvider({
       reminderEnabled: input.reminderEnabled,
       reminderOffsetMinutes: input.reminderOffsetMinutes,
       notificationId: undefined,
+      photoUri: input.photoUri,
       history: [
         buildHistoryEntry(input.status, input.createdAt, 'Atividade criada'),
       ],
@@ -128,6 +131,7 @@ export function ActivitiesProvider({
     const activity = activities.find((item) => item.id === id);
 
     await cancelScheduledActivityReminder(activity?.notificationId);
+    deleteStoredImage(activity?.photoUri);
 
     setActivities((prev) => prev.filter((item) => item.id !== id));
   }
@@ -152,6 +156,7 @@ export function ActivitiesProvider({
       reminderEnabled: input.reminderEnabled,
       reminderOffsetMinutes: input.reminderOffsetMinutes,
       notificationId: undefined,
+      photoUri: input.photoUri,
       history: statusChanged
         ? [
             ...currentActivity.history,

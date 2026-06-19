@@ -1,13 +1,14 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { appAssets } from '../assets';
 import { colors } from '../theme/colors';
 import { spacing } from '../theme/layout';
 
 type AppBrandProps = {
   subtitle?: string;
+  onLogout?: () => void;
 };
 
-export default function AppBrand({ subtitle }: AppBrandProps) {
+export default function AppBrand({ subtitle, onLogout }: AppBrandProps) {
   return (
     <View style={styles.brandRow}>
       <View>
@@ -15,11 +16,18 @@ export default function AppBrand({ subtitle }: AppBrandProps) {
         {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       </View>
 
-      <Image
-        source={appAssets.logo}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <View style={styles.rightSide}>
+        {!!onLogout && (
+          <Pressable onPress={onLogout} hitSlop={8} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>Sair</Text>
+          </Pressable>
+        )}
+        <Image
+          source={appAssets.logo}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </View>
     </View>
   );
 }
@@ -39,6 +47,20 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: spacing.xs,
     fontSize: 14,
+    color: colors.textSecondary,
+  },
+  rightSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  logoutButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textSecondary,
   },
   logo: {
