@@ -11,9 +11,36 @@ export type LocalUser = {
   name: string;
   email: string;
   photoUri?: string;
+  /** Flag derivada para a UI saber se a conta tem perguntas configuradas. */
+  hasSecurityQuestions: boolean;
 };
 
-type StoredUser = LocalUser & { password: string };
+export type SecurityQuestion = {
+  question: string;
+  /** Sempre armazenado normalizado (lowercase + trim). */
+  answer: string;
+};
+
+type StoredUser = Omit<LocalUser, 'hasSecurityQuestions'> & {
+  password: string;
+  securityQuestions?: SecurityQuestion[];
+};
+
+function normalizeAnswer(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function toLocalUser(stored: StoredUser): LocalUser {
+  return {
+    id: stored.id,
+    name: stored.name,
+    email: stored.email,
+    photoUri: stored.photoUri,
+    hasSecurityQuestions:
+      Array.isArray(stored.securityQuestions) &&
+      stored.securityQuestions.length > 0,
+  };
+}
 
 type AuthContextValue = {
   user: LocalUser | null;
@@ -27,6 +54,23 @@ type AuthContextValue = {
     photoUri?: string | null;
   }) => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /** Configura/atualiza as 2 perguntas de segurança do usuário logado. */
+  setSecurityQuestions: (questions: SecurityQuestion[]) => Promise<void>;
+  /**
+   * Retorna apenas as perguntas (sem respostas) de uma conta.
+   * - array → conta existe e tem perguntas
+   * - []    → conta existe mas não configurou perguntas (cair no fluxo simples)
+   * - null  → conta não encontrada
+   */
+  getSecurityQuestionsForEmail: (email: string) => Promise<string[] | null>;
+  /** Reset direto, só para contas que ainda não têm perguntas configuradas. */
+  resetPasswordByEmail: (email: string, newPassword: string) => Promise<void>;
+  /** Reset protegido por perguntas de segurança. */
+  resetPasswordWithSecurityAnswers: (
+    email: string,
+    answers: string[],
+    newPassword: string
+  ) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -58,12 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const users = await getStoredUsers();
           const found = users.find((u) => u.id === sessionId);
           if (found) {
-            setUser({
-              id: found.id,
-              name: found.name,
-              email: found.email,
-              photoUri: found.photoUri,
-            });
+            setUser(toLocalUser(found));
           }
         }
       } finally {
@@ -84,12 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw { code: 'auth/invalid-credential' };
     }
     await AsyncStorage.setItem(SESSION_KEY, found.id);
-    setUser({
-      id: found.id,
-      name: found.name,
-      email: found.email,
-      photoUri: found.photoUri,
-    });
+    setUser(toLocalUser(found));
   }
 
   async function signUp(email: string, password: string, displayName: string) {
@@ -108,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     await saveUsers([...users, newUser]);
     await AsyncStorage.setItem(SESSION_KEY, newUser.id);
-    setUser({ id: newUser.id, name: newUser.name, email: newUser.email });
+    setUser(toLocalUser(newUser));
   }
 
   async function signOut() {
@@ -185,9 +219,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await saveUsers(updated);
   }
 
+  // Redefinição direta — só permitida para contas SEM perguntas configuradas.
+  // Quem optou por proteger a conta com perguntas precisa passar por elas.
+  async function resetPasswordByEmail(email: string, newPassword: string) {
+    const normalized = email.trim().toLowerCase();
+    const users = await getStoredUsers();
+    const found = users.find((u) => u.email.toLowerCase() === normalized);
+    if (!found) {
+      throw { code: 'auth/user-not-found' };
+    }
+    if (found.securityQuestions && found.securityQuestions.length > 0) {
+      throw { code: 'auth/security-questions-required' };
+    }
+    const updated = users.map((u) =>
+      u.id === found.id ? { ...u, password: newPassword } : u
+    );
+    await saveUsers(updated);
+  }
+
+  async function setSecurityQuestions(questions: SecurityQuestion[]) {
+    if (!user) return;
+    const cleaned = questions
+      .map((q) => ({
+        question: q.question.trim(),
+        answer: normalizeAnswer(q.answer),
+      }))
+      .filter((q) => q.question && q.answer);
+
+    if (cleaned.length !== 2) {
+      throw { code: 'auth/invalid-security-questions' };
+    }
+
+    const users = await getStoredUsers();
+    const updated = users.map((u) =>
+      u.id === user.id ? { ...u, securityQuestions: cleaned } : u
+    );
+    await saveUsers(updated);
+    const updatedSelf = updated.find((u) => u.id === user.id);
+    if (updatedSelf) setUser(toLocalUser(updatedSelf));
+  }
+
+  async function getSecurityQuestionsForEmail(email: string) {
+    const normalized = email.trim().toLowerCase();
+    const users = await getStoredUsers();
+    const found = users.find((u) => u.email.toLowerCase() === normalized);
+    if (!found) return null;
+    return found.securityQuestions?.map((q) => q.question) ?? [];
+  }
+
+  async function resetPasswordWithSecurityAnswers(
+    email: string,
+    answers: string[],
+    newPassword: string
+  ) {
+    const normalized = email.trim().toLowerCase();
+    const users = await getStoredUsers();
+    const found = users.find((u) => u.email.toLowerCase() === normalized);
+    if (!found) {
+      throw { code: 'auth/user-not-found' };
+    }
+    const expected = found.securityQuestions ?? [];
+    if (expected.length === 0) {
+      throw { code: 'auth/no-security-questions' };
+    }
+    if (answers.length !== expected.length) {
+      throw { code: 'auth/wrong-security-answer' };
+    }
+    const allMatch = expected.every(
+      (q, i) => q.answer === normalizeAnswer(answers[i] ?? '')
+    );
+    if (!allMatch) {
+      throw { code: 'auth/wrong-security-answer' };
+    }
+    const updated = users.map((u) =>
+      u.id === found.id ? { ...u, password: newPassword } : u
+    );
+    await saveUsers(updated);
+  }
+
   return (
     <AuthContext.Provider
-      value={{ user, isAuthReady, signIn, signUp, signOut, updateUser, updatePassword }}
+      value={{
+        user,
+        isAuthReady,
+        signIn,
+        signUp,
+        signOut,
+        updateUser,
+        updatePassword,
+        setSecurityQuestions,
+        getSecurityQuestionsForEmail,
+        resetPasswordByEmail,
+        resetPasswordWithSecurityAnswers,
+      }}
     >
       {children}
     </AuthContext.Provider>

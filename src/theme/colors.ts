@@ -1,4 +1,4 @@
-export const colors = {
+export const lightColors = {
   background: '#F6F4F7',
   surface: '#FFFFFF',
   surfaceSoft: '#F1EEF4',
@@ -19,3 +19,35 @@ export const colors = {
   success: '#6FBF9F',
   warning: '#E2B96B',
 };
+
+export const darkColors: typeof lightColors = {
+  background: '#1A1721',
+  surface: '#262130',
+  surfaceSoft: '#2F2939',
+
+  primary: '#B79CED',
+  primaryDark: '#9B7FE0',
+  primarySoft: '#3A2F58',
+
+  // Tons de categoria mais profundos para legibilidade no escuro.
+  mint: '#3A6F60',
+  rose: '#7A4760',
+  lavender: '#5A4880',
+
+  text: '#F1EDF5',
+  textSecondary: '#9C95A8',
+  border: '#3A3548',
+  shadow: 'rgba(0, 0, 0, 0.4)',
+
+  success: '#6FBF9F',
+  warning: '#E2B96B',
+};
+
+export type Colors = typeof lightColors;
+
+/**
+ * Compat: módulos que ainda não foram migrados para o hook `useThemedColors()`
+ * continuam consumindo a paleta clara. Componentes refatorados devem
+ * preferir o hook (atualiza com o tema).
+ */
+export const colors = lightColors;

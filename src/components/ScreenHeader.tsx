@@ -1,8 +1,9 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { appAssets } from '@/assets';
-import { colors } from '../theme/colors';
+import { Colors } from '../theme/colors';
 import { spacing } from '../theme/layout';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 type ScreenHeaderProps = {
   title: string;
@@ -10,6 +11,7 @@ type ScreenHeaderProps = {
 };
 
 export default function ScreenHeader({ title, onBack }: ScreenHeaderProps) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.header}>
       <View style={styles.titleBlock}>
@@ -30,7 +32,8 @@ export default function ScreenHeader({ title, onBack }: ScreenHeaderProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: Colors) {
+  return StyleSheet.create({
   header: {
     width: '100%',
     marginBottom: spacing.lg,
@@ -57,4 +60,5 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
   },
-});
+  });
+}

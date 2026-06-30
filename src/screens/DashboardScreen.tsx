@@ -10,10 +10,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors } from '../theme/colors';
+import { Colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
+import { useTheme, useThemedColors, useThemedStyles } from '../theme/ThemeContext';
+import { readableTextOn } from '../theme/contrast';
 import { useActivities } from '../context/ActivitiesContext';
-import { ActivityCategory, ActivityStatus } from '../data/mockActivities';
+import { useCategories } from '../context/CategoriesContext';
+import { useGoals } from '../context/GoalsContext';
+import { countCompletedInPeriod } from '../utils/goals';
+import { ActivityStatus } from '../data/mockActivities';
 import {
   normalizeDateInput,
   toISODate,
@@ -29,12 +34,6 @@ const statusColors: Record<ActivityStatus, string> = {
   'Em andamento': '#DCEBFF',
   Concluída: '#DDF3E7',
   Adiada: '#FCE8DC',
-};
-
-const categoryColors: Record<ActivityCategory, string> = {
-  Estudo: colors.primary,
-  Saúde: colors.mint,
-  Social: colors.rose,
 };
 
 const statuses: ActivityStatus[] = [
@@ -113,7 +112,24 @@ function getWeatherErrorMessage(error: unknown) {
 
 export default function DashboardScreen() {
   const { activities } = useActivities();
+  const { categories, getCategory } = useCategories();
+  const { goals } = useGoals();
+  const { mode } = useTheme();
+  const colors = useThemedColors();
+  const styles = useThemedStyles(createStyles);
   const now = new Date();
+  const metricColors = {
+    total: colors.primarySoft,
+    completed: mode === 'dark' ? '#214A3B' : '#DDF3E7',
+    inProgress: mode === 'dark' ? '#243B56' : '#DCEBFF',
+    postponed: mode === 'dark' ? '#543528' : '#FCE8DC',
+    activeDays: mode === 'dark' ? '#20483F' : '#E8F6F2',
+    focusCategory: mode === 'dark' ? '#382F54' : '#F2ECFA',
+    streak: mode === 'dark' ? '#4A3B1E' : '#FFF1CC',
+    weeklyRhythm: mode === 'dark' ? '#233D50' : '#EAF4FF',
+    oldPending: mode === 'dark' ? '#4F302D' : '#FCE8E6',
+    averageRating: mode === 'dark' ? '#4A3B1E' : '#FFF1CC',
+  };
 
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('Mês');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -174,15 +190,22 @@ export default function DashboardScreen() {
   const postponementRate =
     total > 0 ? Math.round((postponed / total) * 100) : 0;
 
+  const ratedActivities = filteredActivities.filter(
+    (item) => typeof item.rating === 'number'
+  );
+  const averageRating =
+    ratedActivities.length > 0
+      ? ratedActivities.reduce((sum, item) => sum + (item.rating ?? 0), 0) /
+        ratedActivities.length
+      : null;
+
   const activeDays = new Set(
     filteredActivities.map((item) => new Date(item.createdAt).toDateString())
   ).size;
 
-  const categories: ActivityCategory[] = ['Estudo', 'Saúde', 'Social'];
-
   const categoryProgress = categories.map((category) => {
     const categoryActivities = filteredActivities.filter(
-      (item) => item.category === category
+      (item) => item.category === category.id
     );
     const categoryCompleted = categoryActivities.filter(
       (item) => item.status === completedStatus
@@ -433,25 +456,25 @@ export default function DashboardScreen() {
             title="Total"
             value={String(total)}
             subtitle="atividades"
-            backgroundColor={colors.primarySoft}
+            backgroundColor={metricColors.total}
           />
           <MetricCard
             title="Concluídas"
             value={String(completed)}
             subtitle={`${completionRate}% de conclusão`}
-            backgroundColor="#DDF3E7"
+            backgroundColor={metricColors.completed}
           />
           <MetricCard
             title="Em andamento"
             value={String(inProgress)}
             subtitle="em progresso"
-            backgroundColor="#DCEBFF"
+            backgroundColor={metricColors.inProgress}
           />
           <MetricCard
             title="Adiadas"
             value={String(postponed)}
             subtitle={`${postponementRate}% do total`}
-            backgroundColor="#FCE8DC"
+            backgroundColor={metricColors.postponed}
           />
         </View>
 
@@ -460,13 +483,13 @@ export default function DashboardScreen() {
             title="Dias ativos"
             value={String(activeDays)}
             subtitle="dias com atividade"
-            backgroundColor="#E8F6F2"
+            backgroundColor={metricColors.activeDays}
           />
           <MetricCard
             title="Categoria foco"
-            value={topCategory?.category ?? '-'}
+            value={topCategory?.category.name ?? '-'}
             subtitle={`${topCategory?.total ?? 0} atividades`}
-            backgroundColor="#F2ECFA"
+            backgroundColor={metricColors.focusCategory}
           />
         </View>
 
@@ -477,13 +500,13 @@ export default function DashboardScreen() {
             subtitle={
               completionStreak === 1 ? 'dia concluindo' : 'dias concluindo'
             }
-            backgroundColor="#FFF1CC"
+            backgroundColor={metricColors.streak}
           />
           <MetricCard
             title="Ritmo semanal"
             value={String(completedThisWeek)}
             subtitle={weeklyDeltaLabel}
-            backgroundColor="#EAF4FF"
+            backgroundColor={metricColors.weeklyRhythm}
           />
         </View>
 
@@ -492,10 +515,69 @@ export default function DashboardScreen() {
             title="Pendentes antigos"
             value={String(oldPending)}
             subtitle="há 7 dias ou mais"
-            backgroundColor="#FCE8E6"
-            fullWidth
+            backgroundColor={metricColors.oldPending}
+          />
+          <MetricCard
+            title="Avaliação média"
+            value={averageRating != null ? `${averageRating.toFixed(1)}★` : '-'}
+            subtitle={
+              averageRating != null
+                ? `${ratedActivities.length} avaliada(s)`
+                : 'sem avaliações'
+            }
+            backgroundColor={metricColors.averageRating}
           />
         </View>
+
+        {goals.length > 0 && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Metas em andamento</Text>
+            {goals.map((goal) => {
+              const cat = getCategory(goal.categoryId);
+              const done = countCompletedInPeriod(
+                activities,
+                goal.categoryId,
+                goal.period
+              );
+              const percent =
+                goal.target > 0
+                  ? Math.min(100, Math.round((done / goal.target) * 100))
+                  : 0;
+              return (
+                <View key={goal.id} style={styles.categoryBlock}>
+                  <View style={styles.categoryHeader}>
+                    <View style={styles.categoryTitleRow}>
+                      <View
+                        style={[
+                          styles.categoryDot,
+                          { backgroundColor: cat.color },
+                        ]}
+                      />
+                      <Text style={styles.categoryTitle}>
+                        {cat.name} ·{' '}
+                        {goal.period === 'week' ? 'semana' : 'mês'}
+                      </Text>
+                    </View>
+                    <Text style={styles.categoryNumbers}>
+                      {done}/{goal.target}
+                    </Text>
+                  </View>
+                  <View style={styles.progressTrackSmall}>
+                    <View
+                      style={[
+                        styles.progressFillSmall,
+                        {
+                          width: `${percent}%`,
+                          backgroundColor: cat.color,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Progresso Geral</Text>
@@ -546,16 +628,16 @@ export default function DashboardScreen() {
           <Text style={styles.sectionTitle}>Progresso por Categoria</Text>
 
           {categoryProgress.map((item) => (
-            <View key={item.category} style={styles.categoryBlock}>
+            <View key={item.category.id} style={styles.categoryBlock}>
               <View style={styles.categoryHeader}>
                 <View style={styles.categoryTitleRow}>
                   <View
                     style={[
                       styles.categoryDot,
-                      { backgroundColor: categoryColors[item.category] },
+                      { backgroundColor: item.category.color },
                     ]}
                   />
-                  <Text style={styles.categoryTitle}>{item.category}</Text>
+                  <Text style={styles.categoryTitle}>{item.category.name}</Text>
                 </View>
 
                 <Text style={styles.categoryNumbers}>
@@ -569,7 +651,7 @@ export default function DashboardScreen() {
                     styles.progressFillSmall,
                     {
                       width: `${item.progress}%`,
-                      backgroundColor: categoryColors[item.category],
+                      backgroundColor: item.category.color,
                     },
                   ]}
                 />
@@ -631,6 +713,10 @@ function MetricCard({
   backgroundColor,
   fullWidth = false,
 }: MetricCardProps) {
+  const styles = useThemedStyles(createStyles);
+  // Os cards de métrica têm fundo pastel fixo nos dois temas, então o texto
+  // precisa contrastar com o fundo, não com o tema.
+  const textColor = readableTextOn(backgroundColor);
   return (
     <View
       style={[
@@ -639,14 +725,17 @@ function MetricCard({
         { backgroundColor },
       ]}
     >
-      <Text style={styles.metricTitle}>{title}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricSubtitle}>{subtitle}</Text>
+      <Text style={[styles.metricTitle, { color: textColor }]}>{title}</Text>
+      <Text style={[styles.metricValue, { color: textColor }]}>{value}</Text>
+      <Text style={[styles.metricSubtitle, { color: textColor, opacity: 0.7 }]}>
+        {subtitle}
+      </Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: Colors) {
+  return StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
@@ -976,4 +1065,5 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     fontWeight: '600',
   },
-});
+  });
+}

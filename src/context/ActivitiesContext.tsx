@@ -7,7 +7,6 @@ import React, {
 } from 'react';
 
 import {
-  mockActivities,
   Activity,
   ActivityCategory,
   ActivityStatus,
@@ -17,10 +16,13 @@ import {
   cancelScheduledActivityReminder,
   scheduleActivityReminder,
 } from '@/services/notifications';
+import { useAuth } from '@/context/AuthContext';
 import {
-  loadStoredActivities,
-  saveStoredActivities,
-} from '@/services/activityStorage';
+  initActivityDatabase,
+  getAllActivities,
+  upsertActivity,
+  deleteActivity as deleteActivityFromDb,
+} from '@/services/activityDatabase';
 import { deleteStoredImage } from '@/services/imagePicker';
 
 const COMPLETED_STATUS: ActivityStatus = 'Concluída';
@@ -35,6 +37,10 @@ type NewActivityInput = {
   reminderEnabled: boolean;
   reminderOffsetMinutes?: number;
   photoUri?: string;
+  latitude?: number;
+  longitude?: number;
+  locationLabel?: string;
+  rating?: number;
 };
 
 type ActivitiesContextValue = {
@@ -75,30 +81,42 @@ export function ActivitiesProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [activities, setActivities] = useState<Activity[]>(mockActivities);
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
+    let active = true;
+
     async function hydrateActivities() {
-      const storedActivities = await loadStoredActivities();
-
-      if (storedActivities && storedActivities.length > 0) {
-        setActivities(storedActivities);
+      if (!userId) {
+        setActivities([]);
+        setIsHydrated(true);
+        return;
       }
-
-      setIsHydrated(true);
+      setIsHydrated(false);
+      try {
+        await initActivityDatabase();
+        const stored = await getAllActivities(userId);
+        if (active) setActivities(stored);
+      } catch (error) {
+        console.warn('Não foi possível carregar as atividades.', error);
+        if (active) setActivities([]);
+      } finally {
+        if (active) setIsHydrated(true);
+      }
     }
 
     void hydrateActivities();
-  }, []);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-
-    void saveStoredActivities(activities);
-  }, [activities, isHydrated]);
+    return () => {
+      active = false;
+    };
+  }, [userId]);
 
   async function addActivity(input: NewActivityInput) {
+    if (!userId) return;
     const baseActivity: Activity = {
       id: String(Date.now()),
       title: input.title.trim(),
@@ -111,20 +129,21 @@ export function ActivitiesProvider({
       reminderOffsetMinutes: input.reminderOffsetMinutes,
       notificationId: undefined,
       photoUri: input.photoUri,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      locationLabel: input.locationLabel,
+      rating: input.rating,
       history: [
         buildHistoryEntry(input.status, input.createdAt, 'Atividade criada'),
       ],
     };
 
     const notificationId = await scheduleActivityReminder(baseActivity);
+    const persisted: Activity = { ...baseActivity, notificationId };
 
-    setActivities((prev) => [
-      {
-        ...baseActivity,
-        notificationId,
-      },
-      ...prev,
-    ]);
+    await upsertActivity(persisted, userId);
+
+    setActivities((prev) => [persisted, ...prev]);
   }
 
   async function removeActivity(id: string) {
@@ -132,6 +151,7 @@ export function ActivitiesProvider({
 
     await cancelScheduledActivityReminder(activity?.notificationId);
     deleteStoredImage(activity?.photoUri);
+    await deleteActivityFromDb(id);
 
     setActivities((prev) => prev.filter((item) => item.id !== id));
   }
@@ -139,7 +159,7 @@ export function ActivitiesProvider({
   async function updateActivity(id: string, input: NewActivityInput) {
     const currentActivity = activities.find((item) => item.id === id);
 
-    if (!currentActivity) return;
+    if (!currentActivity || !userId) return;
 
     await cancelScheduledActivityReminder(currentActivity.notificationId);
 
@@ -157,6 +177,10 @@ export function ActivitiesProvider({
       reminderOffsetMinutes: input.reminderOffsetMinutes,
       notificationId: undefined,
       photoUri: input.photoUri,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      locationLabel: input.locationLabel,
+      rating: input.rating,
       history: statusChanged
         ? [
             ...currentActivity.history,
@@ -173,16 +197,12 @@ export function ActivitiesProvider({
       updatedActivity.status === COMPLETED_STATUS
         ? undefined
         : await scheduleActivityReminder(updatedActivity);
+    const persisted: Activity = { ...updatedActivity, notificationId };
+
+    await upsertActivity(persisted, userId);
 
     setActivities((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...updatedActivity,
-              notificationId,
-            }
-          : item
-      )
+      prev.map((item) => (item.id === id ? persisted : item))
     );
   }
 
@@ -194,7 +214,7 @@ export function ActivitiesProvider({
   ) {
     const currentActivity = activities.find((item) => item.id === id);
 
-    if (!currentActivity || currentActivity.status === status) return;
+    if (!currentActivity || currentActivity.status === status || !userId) return;
 
     await cancelScheduledActivityReminder(currentActivity.notificationId);
 
@@ -212,16 +232,12 @@ export function ActivitiesProvider({
       status === COMPLETED_STATUS
         ? undefined
         : await scheduleActivityReminder(updatedActivity);
+    const persisted: Activity = { ...updatedActivity, notificationId };
+
+    await upsertActivity(persisted, userId);
 
     setActivities((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...updatedActivity,
-              notificationId,
-            }
-          : item
-      )
+      prev.map((item) => (item.id === id ? persisted : item))
     );
   }
 
@@ -234,7 +250,7 @@ export function ActivitiesProvider({
       updateActivity,
       updateActivityStatus,
     }),
-    [activities, isHydrated]
+    [activities, isHydrated, userId]
   );
 
   return (

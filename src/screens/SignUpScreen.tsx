@@ -16,8 +16,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AppNavigator';
 import AppBrand from '@/components/AppBrand';
 import { useAuth } from '@/context/AuthContext';
-import { colors } from '@/theme/colors';
+import { Colors } from '@/theme/colors';
 import { radius, spacing } from '@/theme/layout';
+import { useThemedColors, useThemedStyles } from '@/theme/ThemeContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'SignUp'>;
@@ -38,6 +39,8 @@ function getErrorMessage(code: string) {
 
 export default function SignUpScreen({ navigation }: Props) {
   const { signUp } = useAuth();
+  const colors = useThemedColors();
+  const styles = useThemedStyles(createStyles);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -183,7 +186,8 @@ export default function SignUpScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: Colors) {
+  return StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
@@ -285,4 +289,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-});
+  });
+}

@@ -8,18 +8,22 @@ import {
   ScrollView,
   Alert,
   Switch,
+  ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { colors } from '../theme/colors';
+import { Colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
+import { useThemedColors, useThemedStyles } from '../theme/ThemeContext';
 import {
   ActivityCategory,
   ActivityStatus,
 } from '../data/mockActivities';
 import { useActivities } from '../context/ActivitiesContext';
+import { useCategories } from '../context/CategoriesContext';
 import {
   isValidTime,
   normalizeDateInput,
@@ -29,6 +33,9 @@ import {
 } from '../utils/date';
 import ScreenHeader from '@/components/ScreenHeader';
 import ImagePickerField from '@/components/ImagePickerField';
+import StarRating from '@/components/StarRating';
+import { getCurrentLocation, CapturedLocation } from '@/services/location';
+import { readableTextOn } from '@/theme/contrast';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateActivity'>;
 type Category = ActivityCategory;
@@ -47,6 +54,9 @@ export default function CreateActivityScreen({
   route,
 }: Props) {
   const { activities, addActivity, updateActivity } = useActivities();
+  const { categories } = useCategories();
+  const colors = useThemedColors();
+  const styles = useThemedStyles(createStyles);
 
   const activityId = route.params?.activityId;
 
@@ -59,7 +69,7 @@ export default function CreateActivityScreen({
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<Category>('Estudo');
+  const [category, setCategory] = useState<Category>(categories[0]?.id ?? 'Estudo');
   const [status, setStatus] = useState<Status>('Pendente');
   const [dateTime, setDateTime] = useState('');
   const [reminderEnabled, setReminderEnabled] = useState(false);
@@ -68,6 +78,9 @@ export default function CreateActivityScreen({
     number | undefined
   >(undefined);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [location, setLocation] = useState<CapturedLocation | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [rating, setRating] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (activityToEdit) {
@@ -80,18 +93,48 @@ export default function CreateActivityScreen({
       setActivityTime(activityToEdit.activityTime || '');
       setReminderOffsetMinutes(activityToEdit.reminderOffsetMinutes);
       setPhotoUri(activityToEdit.photoUri ?? null);
+      setLocation(
+        activityToEdit.latitude != null && activityToEdit.longitude != null
+          ? {
+              latitude: activityToEdit.latitude,
+              longitude: activityToEdit.longitude,
+              label: activityToEdit.locationLabel ?? 'Local registrado',
+            }
+          : null
+      );
+      setRating(activityToEdit.rating);
     } else {
       setTitle('');
       setDescription('');
-      setCategory('Estudo');
+      setCategory(categories[0]?.id ?? 'Estudo');
       setStatus('Pendente');
       setDateTime(toDisplayDate(new Date().toISOString()));
       setReminderEnabled(false);
       setActivityTime('');
       setReminderOffsetMinutes(undefined);
       setPhotoUri(null);
+      setLocation(null);
+      setRating(undefined);
     }
-  }, [activityToEdit]);
+  }, [activityToEdit, categories]);
+
+  async function handleCaptureLocation() {
+    setIsLocating(true);
+    try {
+      const captured = await getCurrentLocation();
+      setLocation(captured);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      Alert.alert(
+        'Localização indisponível',
+        code === 'LOCATION_PERMISSION_DENIED'
+          ? 'Permita o acesso à localização para registrar onde a atividade acontece.'
+          : 'Não foi possível obter sua localização agora. Tente novamente.'
+      );
+    } finally {
+      setIsLocating(false);
+    }
+  }
 
   async function handleSave() {
     if (!title.trim()) {
@@ -121,15 +164,26 @@ export default function CreateActivityScreen({
       reminderEnabled,
       reminderOffsetMinutes,
       photoUri: photoUri ?? undefined,
+      latitude: location?.latitude,
+      longitude: location?.longitude,
+      locationLabel: location?.label,
+      rating,
     };
 
-    if (isEditing && activityToEdit) {
-      await updateActivity(activityToEdit.id, payload);
-    } else {
-      await addActivity(payload);
+    try {
+      if (isEditing && activityToEdit) {
+        await updateActivity(activityToEdit.id, payload);
+      } else {
+        await addActivity(payload);
+      }
+      navigation.goBack();
+    } catch (error) {
+      console.warn('Falha ao salvar a atividade.', error);
+      Alert.alert(
+        'Erro ao salvar',
+        'Não foi possível salvar a atividade. Tente novamente.'
+      );
     }
-
-    navigation.goBack();
   }
 
   return (
@@ -162,24 +216,15 @@ export default function CreateActivityScreen({
 
           <Text style={styles.label}>Categoria</Text>
           <View style={styles.rowWrap}>
-            <SelectChip
-              label="Estudo"
-              selected={category === 'Estudo'}
-              onPress={() => setCategory('Estudo')}
-              backgroundColor={colors.lavender}
-            />
-            <SelectChip
-              label="Saúde"
-              selected={category === 'Saúde'}
-              onPress={() => setCategory('Saúde')}
-              backgroundColor={colors.mint}
-            />
-            <SelectChip
-              label="Social"
-              selected={category === 'Social'}
-              onPress={() => setCategory('Social')}
-              backgroundColor={colors.rose}
-            />
+            {categories.map((cat) => (
+              <SelectChip
+                key={cat.id}
+                label={cat.name}
+                selected={category === cat.id}
+                onPress={() => setCategory(cat.id)}
+                backgroundColor={cat.color}
+              />
+            ))}
           </View>
 
           <Text style={styles.label}>Status</Text>
@@ -225,6 +270,57 @@ export default function CreateActivityScreen({
           <ImagePickerField uri={photoUri} onChange={setPhotoUri} />
           <Text style={styles.helperText}>
             Opcional: registre uma foto da atividade pela câmera ou galeria.
+          </Text>
+
+          <Text style={styles.label}>Localização</Text>
+          {location ? (
+            <View style={styles.locationBox}>
+              <Ionicons name="location" size={18} color={colors.primaryDark} />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {location.label}
+              </Text>
+              <Pressable hitSlop={8} onPress={() => setLocation(null)}>
+                <Text style={styles.locationRemove}>Remover</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              style={[
+                styles.locationButton,
+                isLocating && styles.locationButtonDisabled,
+              ]}
+              onPress={() => void handleCaptureLocation()}
+              disabled={isLocating}
+            >
+              {isLocating ? (
+                <ActivityIndicator color={colors.primaryDark} size="small" />
+              ) : (
+                <>
+                  <Ionicons
+                    name="location-outline"
+                    size={18}
+                    color={colors.primaryDark}
+                  />
+                  <Text style={styles.locationButtonText}>
+                    Usar localização atual
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          )}
+          <Text style={styles.helperText}>
+            Opcional: registra onde a atividade acontece para aparecer no mapa.
+          </Text>
+
+          <Text style={styles.label}>Avaliação</Text>
+          <View style={styles.ratingRow}>
+            <StarRating value={rating} onChange={setRating} />
+            {rating != null && (
+              <Text style={styles.ratingValue}>{rating} / 5</Text>
+            )}
+          </View>
+          <Text style={styles.helperText}>
+            Opcional: dê uma nota para acompanhar a satisfação nas métricas.
           </Text>
 
           <Text style={styles.label}>Data</Text>
@@ -356,6 +452,7 @@ function SelectChip({
   onPress,
   backgroundColor,
 }: SelectChipProps) {
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable
       onPress={onPress}
@@ -365,12 +462,15 @@ function SelectChip({
         selected && styles.chipSelected,
       ]}
     >
-      <Text style={styles.chipText}>{label}</Text>
+      <Text style={[styles.chipText, { color: readableTextOn(backgroundColor) }]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: Colors) {
+  return StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
@@ -467,6 +567,54 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
   },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.primarySoft,
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+  },
+  locationButtonDisabled: {
+    opacity: 0.6,
+  },
+  locationButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primaryDark,
+  },
+  locationBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceSoft,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  locationText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+  },
+  locationRemove: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#C0392B',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  ratingValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
@@ -504,4 +652,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-});
+  });
+}

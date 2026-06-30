@@ -15,21 +15,18 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { Activity, ActivityCategory, ActivityStatus } from '../data/mockActivities';
-import { colors } from '../theme/colors';
+import { Colors } from '../theme/colors';
 import { radius, spacing } from '../theme/layout';
+import { useThemedColors, useThemedStyles } from '../theme/ThemeContext';
 import { useActivities } from '../context/ActivitiesContext';
+import { useCategories } from '../context/CategoriesContext';
+import StarRating from '../components/StarRating';
 import { isToday, normalizeDateInput, toDisplayDate, toISODate } from '../utils/date';
 import AppBrand from '../components/AppBrand';
 type Props = NativeStackScreenProps<RootStackParamList, 'Activities'>;
 type StatusFilter = ActivityStatus | 'Todas';
 type CategoryFilter = ActivityCategory | 'Todas';
 type DateFilter = 'Todas' | 'Hoje' | '7 dias' | '30 dias' | 'Personalizado';
-
-const categoryColors: Record<ActivityCategory, string> = {
-  Estudo: colors.lavender,
-  Saúde: colors.mint,
-  Social: colors.rose,
-};
 
 const statusStyles: Record<
   ActivityStatus,
@@ -66,13 +63,6 @@ const statusFilterOptions: StatusFilter[] = [
   'Em andamento',
   'Concluída',
   'Adiada',
-];
-
-const categoryFilterOptions: CategoryFilter[] = [
-  'Todas',
-  'Estudo',
-  'Saúde',
-  'Social',
 ];
 
 const dateFilterOptions: DateFilter[] = [
@@ -118,6 +108,14 @@ function getReminderLabel(activity: Activity) {
 
 export default function ActivitiesScreen({ navigation }: Props) {
   const { activities, removeActivity, updateActivityStatus } = useActivities();
+  const { categories, getCategory } = useCategories();
+  const colors = useThemedColors();
+  const styles = useThemedStyles(createStyles);
+
+  const categoryFilterOptions = useMemo<CategoryFilter[]>(
+    () => ['Todas', ...categories.map((c) => c.id)],
+    [categories]
+  );
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Todas');
@@ -272,7 +270,17 @@ export default function ActivitiesScreen({ navigation }: Props) {
           text: 'Excluir',
           style: 'destructive',
           onPress: () => {
-            void removeActivity(activity.id);
+            void (async () => {
+              try {
+                await removeActivity(activity.id);
+              } catch (error) {
+                console.warn('Falha ao excluir a atividade.', error);
+                Alert.alert(
+                  'Erro',
+                  'Não foi possível excluir a atividade. Tente novamente.'
+                );
+              }
+            })();
           },
         },
       ]
@@ -319,14 +327,21 @@ export default function ActivitiesScreen({ navigation }: Props) {
       note = postponeNote.trim() || 'Atividade adiada para outra data';
     }
 
-    await updateActivityStatus(
-      selectedActivity.id,
-      selectedStatus,
-      note,
-      postponedUntilISO
-    );
-
-    closeStatusModal();
+    try {
+      await updateActivityStatus(
+        selectedActivity.id,
+        selectedStatus,
+        note,
+        postponedUntilISO
+      );
+      closeStatusModal();
+    } catch (error) {
+      console.warn('Falha ao atualizar o status.', error);
+      Alert.alert(
+        'Erro',
+        'Não foi possível atualizar o status. Tente novamente.'
+      );
+    }
   }
 
   function renderItem({ item }: { item: Activity }) {
@@ -363,7 +378,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
           <View
             style={[
               styles.iconBadge,
-              { backgroundColor: categoryColors[item.category] },
+              { backgroundColor: getCategory(item.category).color },
             ]}
           />
         )}
@@ -379,7 +394,9 @@ export default function ActivitiesScreen({ navigation }: Props) {
               >
                 {item.title}
               </Text>
-              <Text style={styles.activityCategory}>{item.category}</Text>
+              <Text style={styles.activityCategory}>
+                {getCategory(item.category).name}
+              </Text>
             </View>
 
             <Text style={styles.activityDate}>
@@ -415,6 +432,12 @@ export default function ActivitiesScreen({ navigation }: Props) {
 
           {!!item.description && (
             <Text style={styles.activityDescription}>{item.description}</Text>
+          )}
+
+          {item.rating != null && (
+            <View style={styles.ratingMini}>
+              <StarRating value={item.rating} size={14} readonly />
+            </View>
           )}
 
           {item.status === 'Adiada' && latestPostponedEntry && (
@@ -481,7 +504,9 @@ export default function ActivitiesScreen({ navigation }: Props) {
 
             {categoryFilter !== 'Todas' ? (
               <View style={styles.activeFilterPill}>
-                <Text style={styles.activeFilterText}>{categoryFilter}</Text>
+                <Text style={styles.activeFilterText}>
+                  {getCategory(categoryFilter).name}
+                </Text>
               </View>
             ) : null}
 
@@ -600,7 +625,7 @@ export default function ActivitiesScreen({ navigation }: Props) {
                           selected && styles.filterChipTextSelected,
                         ]}
                       >
-                        {option}
+                        {option === 'Todas' ? option : getCategory(option).name}
                       </Text>
                     </Pressable>
                   );
@@ -762,7 +787,8 @@ export default function ActivitiesScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: Colors) {
+  return StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1004,6 +1030,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     lineHeight: 18,
   },
+  ratingMini: {
+    marginBottom: spacing.sm,
+  },
   postponeInfoBox: {
     backgroundColor: '#FDF3EC',
     borderRadius: radius.md,
@@ -1110,4 +1139,5 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontWeight: '700',
   },
-});
+  });
+}

@@ -1,7 +1,8 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { appAssets } from '../assets';
-import { colors } from '../theme/colors';
+import { Colors } from '../theme/colors';
 import { spacing } from '../theme/layout';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 type AppBrandProps = {
   subtitle?: string;
@@ -9,6 +10,7 @@ type AppBrandProps = {
 };
 
 export default function AppBrand({ subtitle, onLogout }: AppBrandProps) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.brandRow}>
       <View>
@@ -32,7 +34,8 @@ export default function AppBrand({ subtitle, onLogout }: AppBrandProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: Colors) {
+  return StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -67,4 +70,5 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
   },
-});
+  });
+}

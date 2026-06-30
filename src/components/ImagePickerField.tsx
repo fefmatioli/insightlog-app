@@ -15,8 +15,9 @@ import {
   captureWithCamera,
   pickFromLibrary,
 } from '@/services/imagePicker';
-import { colors } from '@/theme/colors';
+import { Colors } from '@/theme/colors';
 import { radius, spacing } from '@/theme/layout';
+import { useThemedColors, useThemedStyles } from '@/theme/ThemeContext';
 
 type Props = {
   uri?: string | null;
@@ -36,12 +37,20 @@ export default function ImagePickerField({
   fallback,
 }: Props) {
   const [busy, setBusy] = useState(false);
+  const colors = useThemedColors();
+  const styles = useThemedStyles(createStyles);
 
   async function runPicker(picker: () => Promise<string | null>) {
     setBusy(true);
     try {
       const newUri = await picker();
       if (newUri) onChange(newUri);
+    } catch (error) {
+      console.warn('Falha ao obter a imagem.', error);
+      Alert.alert(
+        'Erro',
+        'Não foi possível usar a imagem agora. Tente novamente.'
+      );
     } finally {
       setBusy(false);
     }
@@ -122,7 +131,8 @@ export default function ImagePickerField({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: Colors) {
+  return StyleSheet.create({
   fill: {
     width: '100%',
     height: '100%',
@@ -182,4 +192,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+  });
+}

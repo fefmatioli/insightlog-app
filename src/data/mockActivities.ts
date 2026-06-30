@@ -1,4 +1,9 @@
-export type ActivityCategory = 'Estudo' | 'Saúde' | 'Social';
+/**
+ * No TP3 as categorias deixaram de ser fixas: agora são ids vindos do
+ * banco (tabela `categories`). Mantemos o alias por compatibilidade,
+ * mas o tipo real é string.
+ */
+export type ActivityCategory = string;
 
 export type ActivityStatus =
   | 'Pendente'
@@ -26,6 +31,11 @@ export type Activity = {
   reminderOffsetMinutes?: number;
   notificationId?: string;
   photoUri?: string;
+  latitude?: number;
+  longitude?: number;
+  locationLabel?: string;
+  /** Avaliação de 1 a 5 estrelas (opcional). */
+  rating?: number;
   history: ActivityHistoryEntry[];
 };
 

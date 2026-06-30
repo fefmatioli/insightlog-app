@@ -16,8 +16,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AppNavigator';
 import AppBrand from '@/components/AppBrand';
 import { useAuth } from '@/context/AuthContext';
-import { colors } from '@/theme/colors';
+import { Colors } from '@/theme/colors';
 import { radius, spacing } from '@/theme/layout';
+import { useThemedColors, useThemedStyles } from '@/theme/ThemeContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -40,6 +41,8 @@ function getErrorMessage(code: string) {
 
 export default function LoginScreen({ navigation }: Props) {
   const { signIn } = useAuth();
+  const colors = useThemedColors();
+  const styles = useThemedStyles(createStyles);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -132,6 +135,14 @@ export default function LoginScreen({ navigation }: Props) {
                 <Text style={styles.buttonText}>Entrar</Text>
               )}
             </Pressable>
+
+            <Pressable
+              onPress={() => navigation.navigate('ForgotPassword')}
+              hitSlop={8}
+              style={styles.forgotButton}
+            >
+              <Text style={styles.forgotText}>Esqueci minha senha</Text>
+            </Pressable>
           </View>
 
           <View style={styles.footer}>
@@ -146,7 +157,8 @@ export default function LoginScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: Colors) {
+  return StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
@@ -234,6 +246,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  forgotButton: {
+    alignSelf: 'center',
+    marginTop: spacing.xs,
+  },
+  forgotText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -248,4 +269,5 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-});
+  });
+}
